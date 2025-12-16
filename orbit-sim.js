@@ -60,10 +60,7 @@
   // -----------------------------
   function zeros(r, c) {
     const A = new Array(r);
-    for (let i = 0; i < r; i++) {
-      const row = new Float64Array(c);
-      A[i] = row;
-    }
+    for (let i = 0; i < r; i++) A[i] = new Float64Array(c);
     return A;
   }
   function eye(n) {
@@ -174,9 +171,7 @@
   function symmetrize(A) {
     const n = A.length;
     const B = zeros(n, n);
-    for (let i = 0; i < n; i++) {
-      for (let j = 0; j < n; j++) B[i][j] = 0.5 * (A[i][j] + A[j][i]);
-    }
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) B[i][j] = 0.5 * (A[i][j] + A[j][i]);
     return B;
   }
 
@@ -273,7 +268,7 @@
   }
 
   function stationState(i, t, Re, omega) {
-    // 12 stations equally spaced (theta0 = (i) * pi/6), 1-indexed in MATLAB
+    // 12 stations equally spaced (theta0 = i*pi/6), i=0..11
     const theta0 = i * Math.PI / 6;
     const th = omega * t + theta0;
     const c = Math.cos(th), s = Math.sin(th);
@@ -312,11 +307,11 @@
     const rhod = (dX*dXd + dY*dYd) / rho;
     const phi = Math.atan2(dY, dX);
 
-    return { rho, rhod, phi, dX, dY, dXd, dYd, sX: s.X, sY: s.Y, sXd: s.Xd, sYd: s.Yd };
+    return { rho, rhod, phi, dX, dY, dXd, dYd };
   }
 
   function H_jacobian_forStations(x, t, stationIds, Re, omega) {
-    // Builds stacked yhat (3*n) and H (3*n x 4) using your MATLAB formulas.
+    // Builds stacked yhat (3*n) and H (3*n x 4)
     const n = stationIds.length;
     const yhat = new Float64Array(3*n);
     const H = zeros(3*n, 4);
@@ -334,7 +329,6 @@
       yhat[3*k + 1] = m.rhod;
       yhat[3*k + 2] = m.phi;
 
-      // H_i
       // Range
       H[3*k + 0][0] = m.dX / rho;
       H[3*k + 0][2] = m.dY / rho;
@@ -414,8 +408,8 @@
       // Cov prediction with linearization: F = I + dt*A
       const A = A_jacobian(this.x, this.mu);
       const F = matAdd(eye(4), matScale(A, dt));
-
       const Qd = QdFromQacc(this.Qacc, dt);
+
       let Pminus = matAdd(matMul(matMul(F, this.P), matTrans(F)), Qd);
       Pminus = symmetrize(Pminus);
 
@@ -452,7 +446,7 @@
       }
 
       // S = H P H' + R
-      const HP = matMul(H, Pminus);          // (m x 4)
+      const HP = matMul(H, Pminus);                 // (m x 4)
       const S = matAdd(matMul(HP, matTrans(H)), R); // (m x m)
       const Ssym = symmetrize(S);
 
@@ -486,6 +480,7 @@
       const e = new Float64Array(4);
       for (let i = 0; i < 4; i++) e[i] = this.x[i] - trueX[i];
       const Pinv = matInv(this.P);
+
       // e' Pinv e
       let s = 0;
       for (let i = 0; i < 4; i++) {
@@ -535,7 +530,6 @@
 
   function clearPanel(ctx, w, h) {
     ctx.clearRect(0, 0, w, h);
-    // subtle vignette
     const g = ctx.createRadialGradient(w*0.5, h*0.4, 10, w*0.5, h*0.5, Math.max(w,h)*0.8);
     g.addColorStop(0, "rgba(58,166,255,0.06)");
     g.addColorStop(1, "rgba(0,0,0,0.0)");
@@ -548,7 +542,6 @@
     ctx.save();
     ctx.translate(x,y);
 
-    // frame
     ctx.strokeStyle = "rgba(110,231,255,0.12)";
     ctx.lineWidth = 1;
     ctx.strokeRect(0,0,w,h);
@@ -573,12 +566,10 @@
       }
     }
 
-    // title
     ctx.fillStyle = "rgba(223,244,255,0.9)";
     ctx.font = "700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillText(title, 10, 16);
 
-    // labels
     ctx.fillStyle = "rgba(127,138,161,0.9)";
     ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     if (xLabel) ctx.fillText(xLabel, w - ctx.measureText(xLabel).width - 10, h - 8);
@@ -658,7 +649,7 @@
     reset(Re) {
       this.cx = 0;
       this.cy = 0;
-      this.kmPerPx = Math.max(10, Re / 140); // reasonable default
+      this.kmPerPx = Math.max(10, Re / 140);
     }
     worldToScreen(wx, wy, w, h) {
       const px = (wx - this.cx) / this.kmPerPx + w/2;
@@ -673,7 +664,7 @@
   }
 
   // -----------------------------
-  // Application state
+  // App state + DOM handles
   // -----------------------------
   const el = {
     statusRun: $("#statusRun"),
@@ -747,7 +738,7 @@
 
   const app = {
     running: false,
-    speed: 10, // default for demo; 1x is real-time
+    speed: 10,           // default: fast demo
     dt: 10,
     Kmax: 1400,
     mu: 398600,
@@ -757,19 +748,16 @@
 
     u: new Float64Array([0,0]),
 
-    // truth + ekf
     t: 0,
     k: 0,
     truth: new Float64Array(4),
     ekf: new EKF(398600, 6378, 2*Math.PI/86400),
 
-    // noise
     enableProcNoise: true,
     enableMeasNoise: true,
     QtrueAcc: eye(2),
     RtrueStn: eye(3),
 
-    // buffers for plotting
     bufMax: 2200,
     tHist: [],
     xTrueHist: [[],[],[],[]],
@@ -789,17 +777,11 @@
     predRhod: [],
     predPhi: [],
 
-    visibleHist: [],
+    pulses: [], // {t0,dur,sx,sy,tx,ty,id}
 
-    // pulses for orbit view
-    pulses: [], // {t0, dur, x0,y0,x1,y1}
-    lastVisible: [],
-
-    // camera + interactions
     cam: new Camera(),
     orbitCtx: null,
 
-    // plot ctx
     ctxStates: null,
     ctxErrors: null,
     ctxMeas: null,
@@ -808,6 +790,9 @@
 
     plotDirty: true,
     lastPlotDraw: 0,
+
+    rng: null,
+    randn: null,
   };
 
   // -----------------------------
@@ -826,7 +811,6 @@
       </svg>
     `;
   }
-
   function makeLightningSVG() {
     return `
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -834,7 +818,6 @@
       </svg>
     `;
   }
-
   function buildStationBoard() {
     el.stationBoard.innerHTML = "";
     for (let i = 1; i <= 12; i++) {
@@ -852,8 +835,7 @@
       el.stationBoard.appendChild(tile);
     }
   }
-
-  function updateStationBoard(visibleIds, pulsingIds, t) {
+  function updateStationBoard(visibleIds, pulsingIds) {
     const visSet = new Set(visibleIds);
     const pulseSet = new Set(pulsingIds);
     for (let i = 1; i <= 12; i++) {
@@ -862,22 +844,18 @@
       tile.classList.toggle("is-visible", visSet.has(i));
       tile.classList.toggle("is-pulsing", pulseSet.has(i));
       const meta = $(`#stmeta-${i}`);
-      if (meta) {
-        meta.textContent = visSet.has(i) ? `VISIBLE` : `—`;
-      }
+      if (meta) meta.textContent = visSet.has(i) ? `VISIBLE` : `—`;
     }
   }
 
   // -----------------------------
-  // Init/reset
+  // Build matrices from UI
   // -----------------------------
   function nominalState(altKm, velFactor, mu, Re) {
     const r0 = Re + altKm;
     const vCirc = r0 * Math.sqrt(mu / Math.pow(r0,3));
-    // Place at (r0, 0), velocity in +Y direction => [X, Xdot, Y, Ydot] = [r0, 0, 0, v]
     return new Float64Array([r0, 0, 0, vCirc * velFactor]);
   }
-
   function buildP0(sigX, sigV) {
     const P0 = zeros(4,4);
     P0[0][0] = sigX*sigX;
@@ -886,14 +864,12 @@
     P0[3][3] = sigV*sigV;
     return P0;
   }
-
   function buildQacc(ax, ay) {
     const Q = zeros(2,2);
     Q[0][0] = ax;
     Q[1][1] = ay;
     return Q;
   }
-
   function buildRstn(sigRho, sigRhod, sigPhi) {
     const R = zeros(3,3);
     R[0][0] = sigRho*sigRho;
@@ -902,138 +878,15 @@
     return R;
   }
 
-  function hardResetAll() {
-    // pull params
-    app.dt = clamp(parseFloat(el.inpDt.value) || 10, 1, 120);
-    app.Kmax = clamp(parseInt(el.inpSteps.value || "1400", 10), 50, 20000);
-    app.mu = parseFloat(el.inpMu.value) || 398600;
-    app.Re = parseFloat(el.inpRe.value) || 6378;
-    app.omega = parseFloat(el.inpOmega.value) || (2*Math.PI/86400);
-    app.seed = (parseInt(el.inpSeed.value || "100", 10) >>> 0);
-
-    app.enableProcNoise = !!el.tglProcNoise.checked;
-    app.enableMeasNoise = !!el.tglMeasNoise.checked;
-
-    app.u[0] = parseFloat(el.inpUx.value) || 0;
-    app.u[1] = parseFloat(el.inpUy.value) || 0;
-
-    // truth noise
-    app.QtrueAcc = buildQacc(parseFloat(el.inpQtrueAx.value) || 1e-10, parseFloat(el.inpQtrueAy.value) || 1e-10);
-    app.RtrueStn = buildRstn(parseFloat(el.inpRtrueRho.value) || 0.01, parseFloat(el.inpRtrueRhod.value) || 1e-4, parseFloat(el.inpRtruePhi.value) || 5e-4);
-
-    // EKF settings
-    const sigX0 = parseFloat(el.inpSigX0.value) || 1e-6;
-    const sigV0 = parseFloat(el.inpSigV0.value) || 1e-5;
-    const P0 = buildP0(sigX0, sigV0);
-
-    const alt = parseFloat(el.inpAlt.value) || 300;
-    const velFactor = parseFloat(el.inpVelFactor.value) || 1.0;
-    const dx = parseFloat(el.inpDx.value) || 0;
-    const dy = parseFloat(el.inpDy.value) || 0;
-    const dvx = parseFloat(el.inpDvx.value) || 0;
-    const dvy = parseFloat(el.inpDvy.value) || 0;
-
-    const xNom0 = nominalState(alt, velFactor, app.mu, app.Re);
-    const x0True = new Float64Array([xNom0[0] + dx, xNom0[1] + dvx, xNom0[2] + dy, xNom0[3] + dvy]);
-
-    // Start EKF slightly perturbed like your script
-    const x0Hat = new Float64Array([xNom0[0] + sigX0, xNom0[1] + sigV0, xNom0[2] + sigX0, xNom0[3] + sigV0]);
-
-    // update EKF constants
-    app.ekf = new EKF(app.mu, app.Re, app.omega);
-    const QkfAcc = buildQacc(parseFloat(el.inpQkfAx.value) || 1e-10, parseFloat(el.inpQkfAy.value) || 1e-10);
-    const RkfStn = buildRstn(parseFloat(el.inpRkfRho.value) || 0.01, parseFloat(el.inpRkfRhod.value) || 1e-4, parseFloat(el.inpRkfPhi.value) || 5e-4);
-    app.ekf.setQR(QkfAcc, RkfStn);
-    app.ekf.reset(x0Hat, P0);
-
-    // truth init
-    app.t = 0;
-    app.k = 0;
-    app.truth = new Float64Array(x0True);
-
-    // RNG
-    app.rng = mulberry32(app.seed);
-    app.randn = makeNormal(app.rng);
-
-    // buffers reset
-    app.tHist = [];
-    app.xTrueHist = [[],[],[],[]];
-    app.xHatHist = [[],[],[],[]];
-    app.sigHist = [[],[],[],[]];
-    app.errHist = [[],[],[],[]];
-    app.neesHist = [];
-    app.nisHist = [];
-    app.nisDfHist = [];
-    app.measT = [];
-    app.measRho = [];
-    app.measRhod = [];
-    app.measPhi = [];
-    app.predT = [];
-    app.predRho = [];
-    app.predRhod = [];
-    app.predPhi = [];
-    app.visibleHist = [];
-    app.pulses = [];
-    app.lastVisible = [];
-    app.plotDirty = true;
-
-    // camera
-    app.cam.reset(app.Re);
-
-    // status
-    setRunning(false);
-    pushHistorySample(); // initial sample
-    updateReadouts([], []);
-    updateStationBoard([], [], app.t);
-  }
-
-  function resetEKFOnly() {
-    const sigX0 = parseFloat(el.inpSigX0.value) || 1e-6;
-    const sigV0 = parseFloat(el.inpSigV0.value) || 1e-5;
-    const P0 = buildP0(sigX0, sigV0);
-
-    // set to nominal truth at current time + small offset
-    const xTrue = app.truth;
-    const x0Hat = new Float64Array([xTrue[0] + sigX0, xTrue[1] + sigV0, xTrue[2] + sigX0, xTrue[3] + sigV0]);
-
-    const QkfAcc = buildQacc(parseFloat(el.inpQkfAx.value) || 1e-10, parseFloat(el.inpQkfAy.value) || 1e-10);
-    const RkfStn = buildRstn(parseFloat(el.inpRkfRho.value) || 0.01, parseFloat(el.inpRkfRhod.value) || 1e-4, parseFloat(el.inpRkfPhi.value) || 5e-4);
-    app.ekf.setQR(QkfAcc, RkfStn);
-    app.ekf.reset(x0Hat, P0);
-
-    // wipe EKF-related histories but keep truth timeline
-    app.xHatHist = [[],[],[],[]];
-    app.sigHist = [[],[],[],[]];
-    app.errHist = [[],[],[],[]];
-    app.neesHist = [];
-    app.nisHist = [];
-    app.nisDfHist = [];
-    app.predT = [];
-    app.predRho = [];
-    app.predRhod = [];
-    app.predPhi = [];
-
-    // rebuild samples from current truth history length (keep tHist)
-    for (let idx = 0; idx < app.tHist.length; idx++) {
-      const t = app.tHist[idx];
-      // placeholder: we won't reconstruct the old EKF; start fresh from now
-      // Fill arrays with NaN to keep plotting coherent
-      for (let j = 0; j < 4; j++) {
-        app.xHatHist[j].push(NaN);
-        app.sigHist[j].push(NaN);
-        app.errHist[j].push(NaN);
-      }
-      app.neesHist.push(NaN);
-      app.nisHist.push(NaN);
-      app.nisDfHist.push(NaN);
-    }
-
-    app.plotDirty = true;
-  }
-
   // -----------------------------
-  // Speed controls
+  // Running / speed
   // -----------------------------
+  function setRunning(run) {
+    app.running = run;
+    el.statusRun.textContent = run ? "RUNNING" : "PAUSED";
+    el.btnToggleRun.textContent = run ? "Pause" : "Run";
+    el.statusRun.style.borderColor = run ? "rgba(120,243,182,.35)" : "rgba(110,231,255,.22)";
+  }
   function setSpeed(s) {
     app.speed = s;
     for (const id of ["spd1","spd10","spd100","spd1000"]) {
@@ -1043,15 +896,8 @@
     }
   }
 
-  function setRunning(run) {
-    app.running = run;
-    el.statusRun.textContent = run ? "RUNNING" : "PAUSED";
-    el.btnToggleRun.textContent = run ? "Pause" : "Run";
-    el.statusRun.style.borderColor = run ? "rgba(120,243,182,.35)" : "rgba(110,231,255,.22)";
-  }
-
   // -----------------------------
-  // History buffer management
+  // Buffer helpers
   // -----------------------------
   function pushLimited(arr, val) {
     arr.push(val);
@@ -1066,7 +912,6 @@
     for (let i = 0; i < 4; i++) {
       pushLimited(app.xTrueHist[i], xt[i]);
       pushLimited(app.xHatHist[i], xh[i]);
-      // sigma from P
       const s = Math.sqrt(Math.max(0, app.ekf.P[i][i]));
       pushLimited(app.sigHist[i], s);
       pushLimited(app.errHist[i], xh[i] - xt[i]);
@@ -1081,25 +926,21 @@
   }
 
   // -----------------------------
-  // Simulation step
+  // Noise sampling
   // -----------------------------
   function sampleMVN(dim, cov, randn) {
-    // Cholesky for small symmetric PSD (simple, with jitter)
+    // Cholesky for small symmetric PSD
     const n = dim;
     const A = matCopy(cov);
     for (let i = 0; i < n; i++) A[i][i] += 1e-18;
 
-    // Cholesky lower
     const L = zeros(n,n);
     for (let i = 0; i < n; i++) {
       for (let j = 0; j <= i; j++) {
         let s = A[i][j];
         for (let k = 0; k < j; k++) s -= L[i][k]*L[j][k];
-        if (i === j) {
-          L[i][j] = Math.sqrt(Math.max(0, s));
-        } else {
-          L[i][j] = s / (L[j][j] + 1e-18);
-        }
+        if (i === j) L[i][j] = Math.sqrt(Math.max(0, s));
+        else L[i][j] = s / (L[j][j] + 1e-18);
       }
     }
 
@@ -1114,23 +955,767 @@
     return x;
   }
 
+  // -----------------------------
+  // Readouts
+  // -----------------------------
+  function updateReadouts(visibleIds) {
+    el.readoutTime.textContent = `${fmt(app.t, 1)} s`;
+    el.readoutStep.textContent = `${app.k}`;
+    el.readoutVisible.textContent = `${visibleIds.length}`;
+
+    if (app.measT.length > 0) {
+      const i = app.measT.length - 1;
+      el.roRho.textContent = `${fmt(app.measRho[i], 3)} km`;
+      el.roRhod.textContent = `${fmt(app.measRhod[i], 5)} km/s`;
+      el.roPhi.textContent = `${fmt(app.measPhi[i], 5)} rad`;
+    } else {
+      el.roRho.textContent = "—";
+      el.roRhod.textContent = "—";
+      el.roPhi.textContent = "—";
+    }
+
+    el.roNEES.textContent = Number.isFinite(app.ekf.lastNEES) ? fmt(app.ekf.lastNEES, 2) : "—";
+    el.roNIS.textContent = Number.isFinite(app.ekf.lastNIS) ? fmt(app.ekf.lastNIS, 2) : "—";
+
+    const dx = app.ekf.x[0] - app.truth[0];
+    const dy = app.ekf.x[2] - app.truth[2];
+    const dvx = app.ekf.x[1] - app.truth[1];
+    const dvy = app.ekf.x[3] - app.truth[3];
+    const nrm = Math.sqrt(dx*dx + dy*dy + dvx*dvx + dvy*dvy);
+    el.roErrNorm.textContent = fmt(nrm, 4);
+  }
+
+  // -----------------------------
+  // Orbit view rendering
+  // -----------------------------
+  function drawCovEllipse(ctx, P, xhat, W, H) {
+    const Pxx = P[0][0], Pxy = P[0][2], Pyy = P[2][2];
+    if (!Number.isFinite(Pxx) || !Number.isFinite(Pyy)) return;
+
+    const tr = Pxx + Pyy;
+    const det = Pxx*Pyy - Pxy*Pxy;
+    const disc = Math.max(0, tr*tr/4 - det);
+    const l1 = tr/2 + Math.sqrt(disc);
+    const l2 = tr/2 - Math.sqrt(disc);
+
+    const angle = 0.5 * Math.atan2(2*Pxy, (Pxx - Pyy));
+    const s1 = Math.sqrt(Math.max(0, l1));
+    const s2 = Math.sqrt(Math.max(0, l2));
+    const k = 2;
+    const rx = (k*s1) / app.cam.kmPerPx;
+    const ry = (k*s2) / app.cam.kmPerPx;
+
+    const c = app.cam.worldToScreen(xhat[0], xhat[2], W, H);
+
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(angle);
+    ctx.strokeStyle = "rgba(110,231,255,0.30)";
+    ctx.fillStyle = "rgba(110,231,255,0.08)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawOrbitView() {
+    const canvas = el.orbitCanvas;
+    const ctx = app.orbitCtx;
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const W = rect.width;
+    const H = rect.height;
+
+    ctx.clearRect(0,0,W,H);
+
+    // Earth
+    const earth = app.cam.worldToScreen(0,0,W,H);
+    const RePx = app.Re / app.cam.kmPerPx;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(earth.x, earth.y, RePx, 0, 2*Math.PI);
+    ctx.fillStyle = "rgba(120,243,182,0.10)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(120,243,182,0.22)";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+
+    // Stations
+    for (let i = 1; i <= 12; i++) {
+      const s = stationState(i - 1, app.t, app.Re, app.omega);
+      const p = app.cam.worldToScreen(s.X, s.Y, W, H);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3.0, 0, 2*Math.PI);
+      ctx.fillStyle = "rgba(120,243,182,0.85)";
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Trajectories
+    const n = app.tHist.length;
+    if (n > 2) {
+      // truth
+      ctx.save();
+      ctx.strokeStyle = "rgba(231,238,252,0.90)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const X = app.xTrueHist[0][i];
+        const Y = app.xTrueHist[2][i];
+        const p = app.cam.worldToScreen(X, Y, W, H);
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      // estimate
+      ctx.save();
+      ctx.strokeStyle = "rgba(110,231,255,0.90)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      let started = false;
+      for (let i = 0; i < n; i++) {
+        const X = app.xHatHist[0][i];
+        const Y = app.xHatHist[2][i];
+        if (!Number.isFinite(X) || !Number.isFinite(Y)) continue;
+        const p = app.cam.worldToScreen(X, Y, W, H);
+        if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Current markers
+    const satT = app.cam.worldToScreen(app.truth[0], app.truth[2], W, H);
+    const satE = app.cam.worldToScreen(app.ekf.x[0], app.ekf.x[2], W, H);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(satT.x, satT.y, 4.5, 0, 2*Math.PI);
+    ctx.fillStyle = "rgba(231,238,252,0.95)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(231,238,252,0.35)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(satE.x, satE.y, 4.5, 0, 2*Math.PI);
+    ctx.fillStyle = "rgba(110,231,255,0.95)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(110,231,255,0.35)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    // Cov ellipse
+    drawCovEllipse(ctx, app.ekf.P, app.ekf.x, W, H);
+
+    // Signal pulses
+    const now = performance.now();
+    const still = [];
+    for (const p of app.pulses) {
+      const age = now - p.t0;
+      if (age > p.dur) continue;
+      still.push(p);
+
+      const a = age / p.dur;
+      const s0 = app.cam.worldToScreen(p.sx, p.sy, W, H);
+      const s1 = app.cam.worldToScreen(p.tx, p.ty, W, H);
+      const x = s0.x + a * (s1.x - s0.x);
+      const y = s0.y + a * (s1.y - s0.y);
+
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,204,102,${0.20 * (1-a)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(s0.x, s0.y);
+      ctx.lineTo(s1.x, s1.y);
+      ctx.stroke();
+
+      ctx.fillStyle = `rgba(255,204,102,${0.85 * (1-a) + 0.15})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 3.2, 0, 2*Math.PI);
+      ctx.fill();
+      ctx.restore();
+    }
+    app.pulses = still;
+
+    // HUD
+    ctx.save();
+    ctx.fillStyle = "rgba(223,244,255,0.92)";
+    ctx.font = "700 12px ui-monospace, Menlo, Consolas, monospace";
+    ctx.fillText(`t = ${fmt(app.t,1)} s`, 10, 18);
+    ctx.fillStyle = "rgba(127,138,161,0.95)";
+    ctx.font = "600 11px ui-monospace, Menlo, Consolas, monospace";
+    ctx.fillText(`km/px = ${fmt(app.cam.kmPerPx, 3)}`, 10, 34);
+    ctx.restore();
+  }
+
+  // -----------------------------
+  // Plot rendering
+  // -----------------------------
+  function drawPlotsIfNeeded() {
+    const now = performance.now();
+    if (!app.plotDirty && (now - app.lastPlotDraw) < 250) return;
+    app.lastPlotDraw = now;
+    app.plotDirty = false;
+
+    drawStatesPlot();
+    drawErrorsPlot();
+    drawMeasPlot();
+    drawTrajPlot();
+    drawConsPlot();
+  }
+
+  function drawStatesPlot() {
+    const ctx = app.ctxStates;
+    if (!ctx) return;
+    const canvas = el.plotStates;
+    const rect = canvas.getBoundingClientRect();
+    const W = rect.width, H = rect.height;
+    clearPanel(ctx, W, H);
+
+    const pad = 12;
+    const tileW = (W - pad*3) / 2;
+    const tileH = (H - pad*3) / 2;
+
+    const labels = ["X (km)", "Xdot (km/s)", "Y (km)", "Ydot (km/s)"];
+    for (let i = 0; i < 4; i++) {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x = pad + col * (tileW + pad);
+      const y = pad + row * (tileH + pad);
+
+      drawAxes(ctx, x, y, tileW, tileH, { title: labels[i], xLabel: "t (s)" });
+
+      const t = app.tHist;
+      const truth = app.xTrueHist[i];
+      const est = app.xHatHist[i];
+      const sig = app.sigHist[i];
+      if (!t.length) continue;
+
+      const up = new Array(est.length);
+      const lo = new Array(est.length);
+      for (let k = 0; k < est.length; k++) {
+        up[k] = est[k] + 2*sig[k];
+        lo[k] = est[k] - 2*sig[k];
+      }
+
+      const { mn, mx } = computeMinMax([truth, est, up, lo]);
+      const tMin = t[0], tMax = t[t.length - 1];
+
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, truth, tMin, tMax, mn, mx, { stroke: "rgba(231,238,252,0.92)", width: 1.5 });
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, est,   tMin, tMax, mn, mx, { stroke: "rgba(110,231,255,0.92)", width: 1.5 });
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, up,    tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.70)", width: 1.2, dash: [6,4] });
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, lo,    tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.70)", width: 1.2, dash: [6,4] });
+    }
+  }
+
+  function drawErrorsPlot() {
+    const ctx = app.ctxErrors;
+    if (!ctx) return;
+    const canvas = el.plotErrors;
+    const rect = canvas.getBoundingClientRect();
+    const W = rect.width, H = rect.height;
+    clearPanel(ctx, W, H);
+
+    const pad = 12;
+    const tileW = W - pad*2;
+    const tileH = (H - pad*5) / 4;
+
+    const labels = ["X error (km)", "Xdot error (km/s)", "Y error (km)", "Ydot error (km/s)"];
+    for (let i = 0; i < 4; i++) {
+      const x = pad;
+      const y = pad + i*(tileH + pad);
+
+      drawAxes(ctx, x, y, tileW, tileH, { title: labels[i], xLabel: i===3 ? "t (s)" : "" });
+
+      const t = app.tHist;
+      const err = app.errHist[i];
+      const sig = app.sigHist[i];
+      if (!t.length) continue;
+
+      const up = new Array(err.length);
+      const lo = new Array(err.length);
+      for (let k = 0; k < err.length; k++) {
+        up[k] = 2*sig[k];
+        lo[k] = -2*sig[k];
+      }
+
+      const { mn, mx } = computeMinMax([err, up, lo]);
+      const tMin = t[0], tMax = t[t.length - 1];
+
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, err, tMin, tMax, mn, mx, { stroke: "rgba(110,231,255,0.92)", width: 1.5 });
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, up,  tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.2, dash: [6,4] });
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, lo,  tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.2, dash: [6,4] });
+
+      // zero line
+      ctx.save();
+      ctx.strokeStyle = "rgba(110,231,255,0.10)";
+      ctx.lineWidth = 1;
+      const y0 = y + 26 + (tileH-34) * (1 - (0 - mn) / (mx - mn));
+      ctx.beginPath();
+      ctx.moveTo(x+8, y0);
+      ctx.lineTo(x+tileW-8, y0);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawMeasPlot() {
+    const ctx = app.ctxMeas;
+    if (!ctx) return;
+    const canvas = el.plotMeas;
+    const rect = canvas.getBoundingClientRect();
+    const W = rect.width, H = rect.height;
+    clearPanel(ctx, W, H);
+
+    const pad = 12;
+    const tileW = W - pad*2;
+    const tileH = (H - pad*5) / 3;
+
+    const tMin = app.tHist.length ? app.tHist[0] : 0;
+    const tMax = app.tHist.length ? app.tHist[app.tHist.length-1] : 1;
+
+    // Range
+    {
+      const x = pad, y = pad;
+      drawAxes(ctx, x, y, tileW, tileH, { title: "Range ρ (km) — measured (blue) vs predicted (red)", xLabel: "" });
+
+      const { mn, mx } = computeMinMax([app.measRho, app.predRho]);
+      plotScatter(ctx, x+8, y+26, tileW-16, tileH-34, app.measT, app.measRho, tMin, tMax, mn, mx, { fill: "rgba(58,166,255,0.90)", r: 2.2 });
+      plotScatter(ctx, x+8, y+26, tileW-16, tileH-34, app.predT, app.predRho, tMin, tMax, mn, mx, { fill: "rgba(255,107,107,0.85)", r: 2.2 });
+    }
+
+    // Range-rate
+    {
+      const x = pad, y = pad + (tileH + pad);
+      drawAxes(ctx, x, y, tileW, tileH, { title: "Range-rate ρ̇ (km/s) — measured (blue) vs predicted (red)", xLabel: "" });
+
+      const { mn, mx } = computeMinMax([app.measRhod, app.predRhod]);
+      plotScatter(ctx, x+8, y+26, tileW-16, tileH-34, app.measT, app.measRhod, tMin, tMax, mn, mx, { fill: "rgba(58,166,255,0.90)", r: 2.2 });
+      plotScatter(ctx, x+8, y+26, tileW-16, tileH-34, app.predT, app.predRhod, tMin, tMax, mn, mx, { fill: "rgba(255,107,107,0.85)", r: 2.2 });
+    }
+
+    // Angle
+    {
+      const x = pad, y = pad + 2*(tileH + pad);
+      drawAxes(ctx, x, y, tileW, tileH, { title: "Angle φ (rad) — measured (blue) vs predicted (red)", xLabel: "t (s)" });
+
+      const { mn, mx } = computeMinMax([app.measPhi, app.predPhi]);
+      plotScatter(ctx, x+8, y+26, tileW-16, tileH-34, app.measT, app.measPhi, tMin, tMax, mn, mx, { fill: "rgba(58,166,255,0.90)", r: 2.2 });
+      plotScatter(ctx, x+8, y+26, tileW-16, tileH-34, app.predT, app.predPhi, tMin, tMax, mn, mx, { fill: "rgba(255,107,107,0.85)", r: 2.2 });
+    }
+  }
+
+  function drawTrajPlot() {
+    const ctx = app.ctxTraj;
+    if (!ctx) return;
+    const canvas = el.plotTraj;
+    const rect = canvas.getBoundingClientRect();
+    const W = rect.width, H = rect.height;
+    clearPanel(ctx, W, H);
+
+    const pad = 12;
+    const x0 = pad, y0 = pad;
+    const w = W - pad*2, h = H - pad*2;
+    drawAxes(ctx, x0, y0, w, h, { title: "XY Trajectory (km) — Truth (white) vs EKF (cyan) + Earth + Stations", xLabel: "X (km)", yLabel: "Y (km)" });
+
+    const Xs = app.xTrueHist[0].concat(app.xHatHist[0].filter(Number.isFinite));
+    const Ys = app.xTrueHist[2].concat(app.xHatHist[2].filter(Number.isFinite));
+    const { mn: xmin0, mx: xmax0 } = computeMinMax([Xs]);
+    const { mn: ymin0, mx: ymax0 } = computeMinMax([Ys]);
+
+    let xmin = xmin0, xmax = xmax0, ymin = ymin0, ymax = ymax0;
+    const xr = xmax - xmin, yr = ymax - ymin;
+    const r = Math.max(xr, yr);
+    const xc = 0.5*(xmin + xmax);
+    const yc = 0.5*(ymin + ymax);
+    xmin = xc - 0.5*r;
+    xmax = xc + 0.5*r;
+    ymin = yc - 0.5*r;
+    ymax = yc + 0.5*r;
+
+    const sx = (X) => x0 + 8 + (X - xmin)/(xmax - xmin) * (w - 16);
+    const sy = (Y) => y0 + 26 + (h - 34) - (Y - ymin)/(ymax - ymin) * (h - 34);
+
+    // Earth
+    ctx.save();
+    const RePx = (app.Re/(xmax-xmin))*(w-16);
+    ctx.beginPath();
+    ctx.arc(sx(0), sy(0), RePx, 0, 2*Math.PI);
+    ctx.fillStyle = "rgba(120,243,182,0.10)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(120,243,182,0.25)";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+
+    // Stations
+    for (let i = 1; i <= 12; i++) {
+      const s = stationState(i - 1, app.t, app.Re, app.omega);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(sx(s.X), sy(s.Y), 2.2, 0, 2*Math.PI);
+      ctx.fillStyle = "rgba(120,243,182,0.85)";
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Truth path
+    ctx.save();
+    ctx.strokeStyle = "rgba(231,238,252,0.92)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i < app.tHist.length; i++) {
+      const X = app.xTrueHist[0][i], Y = app.xTrueHist[2][i];
+      if (i === 0) ctx.moveTo(sx(X), sy(Y));
+      else ctx.lineTo(sx(X), sy(Y));
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // Estimate path
+    ctx.save();
+    ctx.strokeStyle = "rgba(110,231,255,0.92)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < app.tHist.length; i++) {
+      const X = app.xHatHist[0][i], Y = app.xHatHist[2][i];
+      if (!Number.isFinite(X) || !Number.isFinite(Y)) continue;
+      if (!started) { ctx.moveTo(sx(X), sy(Y)); started = true; }
+      else ctx.lineTo(sx(X), sy(Y));
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // Current markers
+    ctx.save();
+    ctx.fillStyle = "rgba(231,238,252,0.95)";
+    ctx.beginPath();
+    ctx.arc(sx(app.truth[0]), sy(app.truth[2]), 3.5, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.fillStyle = "rgba(110,231,255,0.95)";
+    ctx.beginPath();
+    ctx.arc(sx(app.ekf.x[0]), sy(app.ekf.x[2]), 3.5, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawConsPlot() {
+    const ctx = app.ctxCons;
+    if (!ctx) return;
+    const canvas = el.plotCons;
+    const rect = canvas.getBoundingClientRect();
+    const W = rect.width, H = rect.height;
+    clearPanel(ctx, W, H);
+
+    const pad = 12;
+    const tileW = W - pad*2;
+    const tileH = (H - pad*4) / 2;
+
+    const alpha = clamp(parseFloat(el.inpAlpha.value) || 0.05, 0.01, 0.2);
+    const t = app.tHist;
+    const tMin = t.length ? t[0] : 0;
+    const tMax = t.length ? t[t.length-1] : 1;
+
+    // NEES df=4
+    {
+      const x = pad, y = pad;
+      drawAxes(ctx, x, y, tileW, tileH, { title: "NEES (df=4) with χ² bounds", xLabel: "" });
+
+      const df = 4;
+      const lo = chi2Inv(alpha/2, df);
+      const hi = chi2Inv(1 - alpha/2, df);
+      const yLo = new Array(t.length).fill(lo);
+      const yHi = new Array(t.length).fill(hi);
+
+      const { mn, mx } = computeMinMax([app.neesHist, yLo, yHi]);
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, app.neesHist, tMin, tMax, mn, mx, { stroke: "rgba(110,231,255,0.92)", width: 1.5 });
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, yLo, tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.2, dash: [6,4] });
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, yHi, tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.2, dash: [6,4] });
+    }
+
+    // NIS df=3*visible
+    {
+      const x = pad, y = pad + tileH + pad;
+      drawAxes(ctx, x, y, tileW, tileH, { title: "NIS with χ² bounds (df = 3×visible)", xLabel: "t (s)" });
+
+      const loArr = [];
+      const hiArr = [];
+      for (let i = 0; i < app.nisDfHist.length; i++) {
+        const df = app.nisDfHist[i];
+        if (!Number.isFinite(df) || df <= 0) { loArr.push(NaN); hiArr.push(NaN); continue; }
+        loArr.push(chi2Inv(alpha/2, df));
+        hiArr.push(chi2Inv(1 - alpha/2, df));
+      }
+
+      const { mn, mx } = computeMinMax([app.nisHist, loArr, hiArr]);
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, app.nisHist, tMin, tMax, mn, mx, { stroke: "rgba(110,231,255,0.92)", width: 1.5 });
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, loArr, tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.2, dash: [6,4] });
+      plotLine(ctx, x+8, y+26, tileW-16, tileH-34, t, hiArr, tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.2, dash: [6,4] });
+    }
+  }
+
+  // -----------------------------
+  // Tabs
+  // -----------------------------
+  function setupTabs() {
+    const tabs = document.querySelectorAll(".tab");
+    const panes = {
+      states: $("#pane-states"),
+      errors: $("#pane-errors"),
+      meas: $("#pane-meas"),
+      traj: $("#pane-traj"),
+      cons: $("#pane-cons"),
+    };
+
+    function activate(name) {
+      for (const t of tabs) t.classList.toggle("is-active", t.dataset.tab === name);
+      for (const [k, p] of Object.entries(panes)) p.classList.toggle("is-active", k === name);
+      // redraw because canvas sizes sometimes change after display toggles
+      handleResize(true);
+    }
+
+    tabs.forEach(btn => {
+      btn.addEventListener("click", () => activate(btn.dataset.tab));
+    });
+  }
+
+  // -----------------------------
+  // Draggable orbit card
+  // -----------------------------
+  function setupOrbitCardDrag() {
+    const card = el.orbitCard;
+    const handle = el.orbitDragHandle;
+
+    // store initial if not already
+    const init = { left: card.offsetLeft, top: card.offsetTop };
+    card.dataset.initLeft = String(init.left);
+    card.dataset.initTop = String(init.top);
+
+    let dragging = false;
+    let startX = 0, startY = 0;
+    let startLeft = 0, startTop = 0;
+
+    function onDown(e) {
+      // avoid stealing events from buttons
+      if (e.target && (e.target.closest(".iconbtn") || e.target.closest("button"))) return;
+      dragging = true;
+      card.classList.add("is-dragging");
+      const p = getPointerXY(e);
+      startX = p.x;
+      startY = p.y;
+      startLeft = card.offsetLeft;
+      startTop = card.offsetTop;
+      window.addEventListener("pointermove", onMove, { passive: false });
+      window.addEventListener("pointerup", onUp, { passive: true });
+      window.addEventListener("pointercancel", onUp, { passive: true });
+      e.preventDefault();
+    }
+
+    function onMove(e) {
+      if (!dragging) return;
+      const p = getPointerXY(e);
+      const dx = p.x - startX;
+      const dy = p.y - startY;
+
+      // constrain within viewport
+      const maxLeft = Math.max(0, window.innerWidth - card.offsetWidth - 8);
+      const maxTop = Math.max(0, window.innerHeight - card.offsetHeight - 8);
+      const newLeft = clamp(startLeft + dx, 0, maxLeft);
+      const newTop = clamp(startTop + dy, 0, maxTop);
+
+      card.style.left = `${newLeft}px`;
+      card.style.top = `${newTop}px`;
+      card.style.position = "absolute";
+      e.preventDefault();
+    }
+
+    function onUp() {
+      dragging = false;
+      card.classList.remove("is-dragging");
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    }
+
+    handle.addEventListener("pointerdown", onDown, { passive: false });
+
+    el.btnResetLayout.addEventListener("click", () => {
+      card.style.position = "absolute";
+      card.style.left = `${card.dataset.initLeft || 12}px`;
+      card.style.top = `${card.dataset.initTop || 12}px`;
+    });
+  }
+
+  function getPointerXY(e) {
+    if (e.touches && e.touches.length) {
+      return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+    return { x: e.clientX, y: e.clientY };
+  }
+
+  // -----------------------------
+  // Orbit canvas pan/zoom (mouse + touch pinch)
+  // -----------------------------
+  function setupOrbitPanZoom() {
+    const canvas = el.orbitCanvas;
+
+    let panning = false;
+    let last = { x: 0, y: 0 };
+    let pinch = { active: false, idA: null, idB: null, dist0: 0, kmPerPx0: 0, mid0: null };
+
+    const pointers = new Map();
+
+    canvas.addEventListener("pointerdown", (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (pointers.size === 1) {
+        panning = true;
+        last = { x: e.clientX, y: e.clientY };
+      } else if (pointers.size === 2) {
+        // start pinch
+        const ids = Array.from(pointers.keys());
+        const A = pointers.get(ids[0]);
+        const B = pointers.get(ids[1]);
+        pinch.active = true;
+        pinch.idA = ids[0];
+        pinch.idB = ids[1];
+        pinch.dist0 = Math.hypot(B.x - A.x, B.y - A.y);
+        pinch.kmPerPx0 = app.cam.kmPerPx;
+
+        const rect = canvas.getBoundingClientRect();
+        const mid = { x: (A.x + B.x)/2 - rect.left, y: (A.y + B.y)/2 - rect.top };
+        pinch.mid0 = mid;
+
+        panning = false;
+      }
+
+      e.preventDefault();
+    }, { passive: false });
+
+    canvas.addEventListener("pointermove", (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      const rect = canvas.getBoundingClientRect();
+      const W = rect.width, H = rect.height;
+
+      if (pinch.active && pointers.size === 2) {
+        const A = pointers.get(pinch.idA);
+        const B = pointers.get(pinch.idB);
+        if (!A || !B) return;
+
+        const dist = Math.hypot(B.x - A.x, B.y - A.y);
+        const scale = dist / (pinch.dist0 + 1e-9);
+        const newKmPerPx = clamp(pinch.kmPerPx0 / scale, 2, 500);
+
+        // zoom about pinch midpoint
+        const mid = pinch.mid0;
+        const before = app.cam.screenToWorld(mid.x, mid.y, W, H);
+        app.cam.kmPerPx = newKmPerPx;
+        const after = app.cam.screenToWorld(mid.x, mid.y, W, H);
+        app.cam.cx += (before.x - after.x);
+        app.cam.cy += (before.y - after.y);
+
+        e.preventDefault();
+        return;
+      }
+
+      if (!panning) return;
+
+      const dx = e.clientX - last.x;
+      const dy = e.clientY - last.y;
+      last = { x: e.clientX, y: e.clientY };
+
+      app.cam.cx -= dx * app.cam.kmPerPx;
+      app.cam.cy -= dy * app.cam.kmPerPx;
+
+      e.preventDefault();
+    }, { passive: false });
+
+    function endPointer(e) {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinch.active = false;
+      if (pointers.size === 0) panning = false;
+    }
+    canvas.addEventListener("pointerup", endPointer, { passive: true });
+    canvas.addEventListener("pointercancel", endPointer, { passive: true });
+
+    canvas.addEventListener("wheel", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const W = rect.width, H = rect.height;
+
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      const before = app.cam.screenToWorld(mx, my, W, H);
+
+      const zoom = Math.exp(-e.deltaY * 0.0015);
+      app.cam.kmPerPx = clamp(app.cam.kmPerPx / zoom, 2, 500);
+
+      const after = app.cam.screenToWorld(mx, my, W, H);
+      app.cam.cx += (before.x - after.x);
+      app.cam.cy += (before.y - after.y);
+
+      e.preventDefault();
+    }, { passive: false });
+
+    el.btnResetView.addEventListener("click", () => app.cam.reset(app.Re));
+    el.btnCenterView.addEventListener("click", () => {
+      app.cam.cx = 0;
+      app.cam.cy = 0;
+    });
+  }
+
+  // -----------------------------
+  // Simulation step
+  // -----------------------------
+  function spawnSignalPulses(xTrue, tNow, stationIds) {
+    for (const id of stationIds) {
+      const s = stationState(id - 1, tNow, app.Re, app.omega);
+      app.pulses.push({
+        t0: performance.now(),
+        dur: 320,
+        sx: xTrue[0],
+        sy: xTrue[2],
+        tx: s.X,
+        ty: s.Y,
+        id
+      });
+    }
+    if (app.pulses.length > 200) app.pulses.splice(0, app.pulses.length - 200);
+  }
+
   function simulateOneStep() {
     if (app.k >= app.Kmax) {
       setRunning(false);
       return;
     }
 
-    // update live params that can change while running
+    // live params
     app.dt = clamp(parseFloat(el.inpDt.value) || app.dt, 1, 120);
+    app.Kmax = clamp(parseInt(el.inpSteps.value || String(app.Kmax), 10), 50, 20000);
     app.mu = parseFloat(el.inpMu.value) || app.mu;
     app.Re = parseFloat(el.inpRe.value) || app.Re;
     app.omega = parseFloat(el.inpOmega.value) || app.omega;
+
     app.enableProcNoise = !!el.tglProcNoise.checked;
     app.enableMeasNoise = !!el.tglMeasNoise.checked;
     app.u[0] = parseFloat(el.inpUx.value) || 0;
     app.u[1] = parseFloat(el.inpUy.value) || 0;
 
-    // Update EKF noise matrices live
+    // update EKF constants
     app.ekf.mu = app.mu;
     app.ekf.Re = app.Re;
     app.ekf.omega = app.omega;
@@ -1139,30 +1724,27 @@
       buildRstn(parseFloat(el.inpRkfRho.value) || 0.01, parseFloat(el.inpRkfRhod.value) || 1e-4, parseFloat(el.inpRkfPhi.value) || 5e-4)
     );
 
-    // Truth noise matrices live
+    // truth noise matrices
     app.QtrueAcc = buildQacc(parseFloat(el.inpQtrueAx.value) || 1e-10, parseFloat(el.inpQtrueAy.value) || 1e-10);
     app.RtrueStn = buildRstn(parseFloat(el.inpRtrueRho.value) || 0.01, parseFloat(el.inpRtrueRhod.value) || 1e-4, parseFloat(el.inpRtruePhi.value) || 5e-4);
 
     const dt = app.dt;
     const tNext = app.t + dt;
 
-    // Propagate truth
+    // Truth propagation
     let xTrueNext = rk4Step(app.truth, app.u, dt, app.mu);
 
-    // Add process noise (truth)
     if (app.enableProcNoise) {
       const QdTrue = QdFromQacc(app.QtrueAcc, dt);
       const w = sampleMVN(4, QdTrue, app.randn);
       for (let i = 0; i < 4; i++) xTrueNext[i] += w[i];
     }
 
-    // Determine visible stations at tNext (matches your data alignment)
+    // Visible stations at tNext
     const vis = visibleStations(xTrueNext, tNext, app.Re, app.omega);
 
-    // Measurements from truth
+    // Measurements
     let yMeas = new Float64Array(0);
-    const pulsingIds = vis.slice(); // measurement attempt for every visible station each step
-
     if (vis.length > 0) {
       yMeas = new Float64Array(3 * vis.length);
       for (let k = 0; k < vis.length; k++) {
@@ -1172,9 +1754,7 @@
         yMeas[3*k+2] = m.phi;
       }
 
-      // add measurement noise
       if (app.enableMeasNoise) {
-        // Build block R, sample noise
         const mDim = yMeas.length;
         const R = zeros(mDim, mDim);
         for (let k = 0; k < vis.length; k++) {
@@ -1186,8 +1766,7 @@
         for (let i = 0; i < mDim; i++) yMeas[i] += v[i];
       }
 
-      // store measurement scatter arrays (per-station points)
-      // For plotting like your MATLAB: scatter all station pass points vs time
+      // store measurements scatter
       for (let k = 0; k < vis.length; k++) {
         pushLimited(app.measT, tNext);
         pushLimited(app.measRho, yMeas[3*k+0]);
@@ -1196,10 +1775,10 @@
       }
     }
 
-    // EKF step with measurements at tNext
+    // EKF update
     app.ekf.step(dt, tNext, app.u, yMeas, vis);
 
-    // Store predicted measurements (EKF yhat-) if available
+    // Store predicted measurement scatter
     if (app.ekf.lastYhat && app.ekf.lastYhat.length > 0) {
       const yhat = app.ekf.lastYhat;
       const n = yhat.length / 3;
@@ -1211,34 +1790,248 @@
       }
     }
 
-    // Add orbit-view signal pulses
-    spawnSignalPulses(xTrueNext, tNext, pulsingIds);
+    // pulses (measurement taken this step)
+    if (vis.length > 0) spawnSignalPulses(xTrueNext, tNext, vis);
 
-    // Advance
+    // advance
     app.truth = xTrueNext;
     app.t = tNext;
     app.k += 1;
 
     pushHistorySample();
-    updateReadouts(vis, pulsingIds);
-    updateStationBoard(vis, pulsingIds, tNext);
+    updateReadouts(vis);
+    updateStationBoard(vis, vis);
   }
 
-  function spawnSignalPulses(xTrue, tNow, stationIds) {
-    // Convert world coords to canvas coords later at render time.
-    // Store pulses in world coords.
-    for (const id of stationIds) {
-      const s = stationState(id - 1, tNow, app.Re, app.omega);
-      app.pulses.push({
-        t0: performance.now(),
-        dur: 320, // ms
-        sx: xTrue[0],
-        sy: xTrue[2],
-        tx: s.X,
-        ty: s.Y,
-        id
-      });
-    }
-    // prune
-    if (app.pulses.length > 200) app.pulses.splice(0, app.pulses.length - 200);
+  // -----------------------------
+  // Reset / initialization
+  // -----------------------------
+  function hardResetAll() {
+    app.dt = clamp(parseFloat(el.inpDt.value) || 10, 1, 120);
+    app.Kmax = clamp(parseInt(el.inpSteps.value || "1400", 10), 50, 20000);
+    app.mu = parseFloat(el.inpMu.value) || 398600;
+    app.Re = parseFloat(el.inpRe.value) || 6378;
+    app.omega = parseFloat(el.inpOmega.value) || (2*Math.PI/86400);
+    app.seed = (parseInt(el.inpSeed.value || "100", 10) >>> 0);
+
+    app.enableProcNoise = !!el.tglProcNoise.checked;
+    app.enableMeasNoise = !!el.tglMeasNoise.checked;
+
+    app.u[0] = parseFloat(el.inpUx.value) || 0;
+    app.u[1] = parseFloat(el.inpUy.value) || 0;
+
+    app.QtrueAcc = buildQacc(parseFloat(el.inpQtrueAx.value) || 1e-10, parseFloat(el.inpQtrueAy.value) || 1e-10);
+    app.RtrueStn = buildRstn(parseFloat(el.inpRtrueRho.value) || 0.01, parseFloat(el.inpRtrueRhod.value) || 1e-4, parseFloat(el.inpRtruePhi.value) || 5e-4);
+
+    const sigX0 = parseFloat(el.inpSigX0.value) || 1e-6;
+    const sigV0 = parseFloat(el.inpSigV0.value) || 1e-5;
+    const P0 = buildP0(sigX0, sigV0);
+
+    const alt = parseFloat(el.inpAlt.value) || 300;
+    const velFactor = parseFloat(el.inpVelFactor.value) || 1.0;
+    const dx = parseFloat(el.inpDx.value) || 0;
+    const dy = parseFloat(el.inpDy.value) || 0;
+    const dvx = parseFloat(el.inpDvx.value) || 0;
+    const dvy = parseFloat(el.inpDvy.value) || 0;
+
+    const xNom0 = nominalState(alt, velFactor, app.mu, app.Re);
+    const x0True = new Float64Array([xNom0[0] + dx, xNom0[1] + dvx, xNom0[2] + dy, xNom0[3] + dvy]);
+    const x0Hat = new Float64Array([xNom0[0] + sigX0, xNom0[1] + sigV0, xNom0[2] + sigX0, xNom0[3] + sigV0]);
+
+    app.ekf = new EKF(app.mu, app.Re, app.omega);
+    const QkfAcc = buildQacc(parseFloat(el.inpQkfAx.value) || 1e-10, parseFloat(el.inpQkfAy.value) || 1e-10);
+    const RkfStn = buildRstn(parseFloat(el.inpRkfRho.value) || 0.01, parseFloat(el.inpRkfRhod.value) || 1e-4, parseFloat(el.inpRkfPhi.value) || 5e-4);
+    app.ekf.setQR(QkfAcc, RkfStn);
+    app.ekf.reset(x0Hat, P0);
+
+    app.t = 0;
+    app.k = 0;
+    app.truth = new Float64Array(x0True);
+
+    app.rng = mulberry32(app.seed);
+    app.randn = makeNormal(app.rng);
+
+    app.tHist = [];
+    app.xTrueHist = [[],[],[],[]];
+    app.xHatHist = [[],[],[],[]];
+    app.sigHist = [[],[],[],[]];
+    app.errHist = [[],[],[],[]];
+    app.neesHist = [];
+    app.nisHist = [];
+    app.nisDfHist = [];
+
+    app.measT = [];
+    app.measRho = [];
+    app.measRhod = [];
+    app.measPhi = [];
+    app.predT = [];
+    app.predRho = [];
+    app.predRhod = [];
+    app.predPhi = [];
+
+    app.pulses = [];
+    app.plotDirty = true;
+
+    app.cam.reset(app.Re);
+
+    setRunning(false);
+    pushHistorySample();
+    updateReadouts([]);
+    updateStationBoard([], []);
   }
+
+function resetEKFOnly() {
+  const sigX0 = parseFloat(el.inpSigX0.value) || 1e-6;
+  const sigV0 = parseFloat(el.inpSigV0.value) || 1e-5;
+  const P0 = buildP0(sigX0, sigV0);
+  const xTrue = app.truth;
+  const x0Hat = new Float64Array([xTrue[0] + sigX0, xTrue[1] + sigV0, xTrue[2] + sigX0, xTrue[3] + sigV0]);
+
+  app.ekf.setQR(
+    buildQacc(parseFloat(el.inpQkfAx.value) || 1e-10, parseFloat(el.inpQkfAy.value) || 1e-10),
+    buildRstn(parseFloat(el.inpRkfRho.value) || 0.01, parseFloat(el.inpRkfRhod.value) || 1e-4, parseFloat(el.inpRkfPhi.value) || 5e-4)
+  );
+  app.ekf.reset(x0Hat, P0);
+
+  // wipe EKF-dependent histories (keep truth history)
+  app.xHatHist = [[], [], [], []];
+  app.sigHist = [[], [], [], []];
+  app.errHist = [[], [], [], []];
+  app.neesHist = [];
+  app.nisHist = [];
+  app.nisDfHist = [];
+  app.predT = [];
+  app.predRho = [];
+  app.predRhod = [];
+  app.predPhi = [];
+
+  // align lengths with tHist using NaNs up to current point
+  for (let idx = 0; idx < app.tHist.length; idx++) {
+    for (let j = 0; j < 4; j++) {
+      app.xHatHist[j].push(NaN);
+      app.sigHist[j].push(NaN);
+      app.errHist[j].push(NaN);
+    }
+    app.neesHist.push(NaN);
+    app.nisHist.push(NaN);
+    app.nisDfHist.push(NaN);
+  }
+
+  app.plotDirty = true;
+}
+
+// -----------------------------
+// Meas/plot panes already implemented earlier in file:
+// drawStatesPlot/drawErrorsPlot/drawMeasPlot/drawTrajPlot/drawConsPlot
+// -----------------------------
+
+// -----------------------------
+// UI wiring
+// -----------------------------
+function setupSpeedButtons() {
+  const group = document.querySelectorAll(".chip[data-speed]");
+  group.forEach((btn) => {
+    btn.addEventListener("click", () => setSpeed(parseFloat(btn.dataset.speed)));
+  });
+}
+
+function setupControlButtons() {
+  el.btnToggleRun.addEventListener("click", () => setRunning(!app.running));
+  el.btnStep.addEventListener("click", () => {
+    if (!app.running) simulateOneStep();
+  });
+  el.btnReset.addEventListener("click", hardResetAll);
+  el.btnApplyIC.addEventListener("click", hardResetAll);
+  el.btnResetFilter.addEventListener("click", resetEKFOnly);
+}
+
+// -----------------------------
+// Resize handling (HiDPI canvas)
+// -----------------------------
+function handleResize(force = false) {
+  // Orbit canvas
+  app.orbitCtx = setupCanvasHiDPI(el.orbitCanvas);
+
+  // Plot canvases
+  app.ctxStates = setupCanvasHiDPI(el.plotStates);
+  app.ctxErrors = setupCanvasHiDPI(el.plotErrors);
+  app.ctxMeas = setupCanvasHiDPI(el.plotMeas);
+  app.ctxTraj = setupCanvasHiDPI(el.plotTraj);
+  app.ctxCons = setupCanvasHiDPI(el.plotCons);
+
+  app.plotDirty = true;
+  if (force) {
+    drawOrbitView();
+    drawPlotsIfNeeded();
+  }
+}
+
+// -----------------------------
+// Animation loop with real-time speed mapping
+// -----------------------------
+// Definition: speed = 1 means dt seconds of sim time takes dt seconds real time.
+// So sim-time rate = speed * 1.0 seconds per second.
+let lastRAF = 0;
+let simTimeAccumulator = 0; // seconds of simulated time to process
+
+function tickRAF(ts) {
+  if (!lastRAF) lastRAF = ts;
+  const dtReal = (ts - lastRAF) / 1000;
+  lastRAF = ts;
+
+  if (app.running) {
+    // accumulate desired simulated time (sec)
+    simTimeAccumulator += dtReal * app.speed;
+
+    // step in fixed chunks of app.dt
+    // guard against long frame: cap how many steps per frame
+    const maxStepsPerFrame = 50;
+    let steps = 0;
+    while (simTimeAccumulator >= app.dt && steps < maxStepsPerFrame) {
+      simulateOneStep();
+      simTimeAccumulator -= app.dt;
+      steps++;
+    }
+    if (steps === maxStepsPerFrame) {
+      // drop leftover to prevent spiral of death
+      simTimeAccumulator = 0;
+    }
+  } else {
+    // when paused, don't accumulate (prevents jump on resume)
+    simTimeAccumulator = 0;
+  }
+
+  drawOrbitView();
+  drawPlotsIfNeeded();
+  requestAnimationFrame(tickRAF);
+}
+
+// -----------------------------
+// Bootstrap
+// -----------------------------
+function init() {
+  buildStationBoard();
+  setupTabs();
+  setupSpeedButtons();
+  setupControlButtons();
+  setupOrbitCardDrag();
+  setupOrbitPanZoom();
+
+  // default: 10× highlighted
+  setSpeed(10);
+
+  handleResize(true);
+  window.addEventListener("resize", () => handleResize(true));
+
+  hardResetAll();
+  requestAnimationFrame(tickRAF);
+}
+
+// Start once DOM is ready
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init, { once: true });
+} else {
+  init();
+}
+})();
+
