@@ -2,94 +2,463 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Orbit Determination & EKF Simulation</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="color-scheme" content="dark light">
+  <title>Orbit Determination EKF Simulator</title>
 
-  <link rel="stylesheet" href="orbit-sim.css" />
-  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <!-- Security (best-effort on GH Pages; headers are better, but this helps) -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self';
+                 img-src 'self' data:;
+                 style-src 'self';
+                 script-src 'self';
+                 object-src 'none';
+                 base-uri 'self';
+                 frame-ancestors 'none';
+                 form-action 'self';
+                 upgrade-insecure-requests">
+
+  <link rel="icon" type="image/x-icon" href="favicon.ico"/>
+  <link rel="stylesheet" href="orbit-sim.css"/>
 </head>
 
 <body>
-<nav class="navbar">
-  <div class="nav-container">
-    <a href="../index.html" class="nav-back-btn">
-      <i data-lucide="arrow-left"></i>
-      Back
-    </a>
-    <div class="nav-brand">
-      <i data-lucide="satellite"></i>
-      Orbit EKF
+  <header class="topbar" role="banner">
+    <div class="topbar__left">
+      <a class="backbtn" href="https://jack-huston.github.io/#projects" aria-label="Back to Portfolio">
+        <span class="backbtn__icon" aria-hidden="true">←</span>
+        <span class="backbtn__text">Back to Portfolio</span>
+      </a>
+      <div class="brand">
+        <div class="brand__mark" aria-hidden="true">DSN</div>
+        <div class="brand__text">
+          <div class="brand__title">Orbit Determination • EKF Demo</div>
+          <div class="brand__subtitle">Rotating Stations • Noisy Measurements • Real-time Estimation</div>
+        </div>
+      </div>
     </div>
+
+    <div class="topbar__right">
+      <div class="statuspill" title="Simulation status">
+        <span class="dot" id="statusDot" aria-hidden="true"></span>
+        <span id="statusText">Ready</span>
+      </div>
+
+      <button class="pillbtn" id="btnHelp" type="button" aria-haspopup="dialog" aria-controls="helpModal">
+        Help
+      </button>
+    </div>
+  </header>
+
+  <main class="page" role="main">
+    <section class="hero">
+      <div class="hero__copy">
+        <h1 class="hero__title">Live EKF Orbit Determination</h1>
+        <p class="hero__lead">
+          A physics-based 2D spacecraft orbit with 12 Earth-fixed tracking stations.
+          Each 10 seconds of simulation time, visible stations generate noisy measurements
+          (range, range-rate, angle). An Extended Kalman Filter estimates the spacecraft state in real time.
+        </p>
+
+        <div class="hero__badges">
+          <span class="badge">RK4 Dynamics</span>
+          <span class="badge">Horizon Visibility</span>
+          <span class="badge">Multi-station Stacked Updates</span>
+          <span class="badge">NEES / NIS</span>
+          <span class="badge">Mobile Friendly</span>
+        </div>
+      </div>
+
+      <div class="hero__quick">
+        <div class="quickcard">
+          <div class="quickcard__title">Now</div>
+          <div class="quickgrid">
+            <div class="qitem">
+              <div class="qk">t (sim)</div>
+              <div class="qv" id="readTime">0 s</div>
+            </div>
+            <div class="qitem">
+              <div class="qk">Visible Stations</div>
+              <div class="qv" id="readVis">0</div>
+            </div>
+            <div class="qitem">
+              <div class="qk">Speed</div>
+              <div class="qv" id="readSpeed">1×</div>
+            </div>
+            <div class="qitem">
+              <div class="qk">Step</div>
+              <div class="qv" id="readDt">10 s</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="quickcard">
+          <div class="quickcard__title">State (Truth / EKF)</div>
+          <div class="stategrid">
+            <div class="sgrow">
+              <div class="sgk">X (km)</div>
+              <div class="sgv" id="readX">—</div>
+              <div class="sgv2" id="readXhat">—</div>
+            </div>
+            <div class="sgrow">
+              <div class="sgk">Y (km)</div>
+              <div class="sgv" id="readY">—</div>
+              <div class="sgv2" id="readYhat">—</div>
+            </div>
+            <div class="sgrow">
+              <div class="sgk">Ẋ (km/s)</div>
+              <div class="sgv" id="readXd">—</div>
+              <div class="sgv2" id="readXdhat">—</div>
+            </div>
+            <div class="sgrow">
+              <div class="sgk">Ẏ (km/s)</div>
+              <div class="sgv" id="readYd">—</div>
+              <div class="sgv2" id="readYdhat">—</div>
+            </div>
+          </div>
+          <div class="legendmini">
+            <span class="leg leg--truth"></span> Truth
+            <span class="leg leg--ekf"></span> EKF
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="layout">
+      <aside class="panel">
+        <div class="panel__section">
+          <div class="panel__title">Simulation Controls</div>
+
+          <div class="row">
+            <button class="btn btn--primary" id="btnPlay" type="button">Play</button>
+            <button class="btn" id="btnPause" type="button">Pause</button>
+            <button class="btn" id="btnStep" type="button">Step</button>
+            <button class="btn btn--danger" id="btnReset" type="button">Reset</button>
+          </div>
+
+          <div class="row row--wrap">
+            <div class="speedgroup" role="group" aria-label="Simulation speed">
+              <button class="chip is-on" data-speed="1" type="button">1×</button>
+              <button class="chip" data-speed="10" type="button">10×</button>
+              <button class="chip" data-speed="100" type="button">100×</button>
+              <button class="chip" data-speed="1000" type="button">1000×</button>
+            </div>
+          </div>
+
+          <div class="fieldgrid">
+            <label class="field">
+              <span class="field__label">dt (sim seconds)</span>
+              <input class="field__input" id="inpDt" type="number" min="1" max="60" step="1" value="10">
+              <span class="field__hint">Measurements occur every dt.</span>
+            </label>
+
+            <label class="field">
+              <span class="field__label">Max steps/sec (wall-clock)</span>
+              <input class="field__input" id="inpMaxStepsPerSec" type="number" min="5" max="5000" step="5" value="300">
+              <span class="field__hint">Caps CPU usage, prevents “too fast”.</span>
+            </label>
+
+            <label class="field">
+              <span class="field__label">Random seed</span>
+              <input class="field__input" id="inpSeed" type="number" min="1" max="999999" step="1" value="100">
+              <span class="field__hint">Reproducible noise draws.</span>
+            </label>
+
+            <label class="field">
+              <span class="field__label">Show ±2σ overlays</span>
+              <select class="field__input" id="selSigmaOverlay">
+                <option value="on" selected>On</option>
+                <option value="off">Off</option>
+              </select>
+              <span class="field__hint">For state & error plots.</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="panel__section">
+          <div class="panel__title">Noise + EKF Parameters (Live)</div>
+
+          <div class="split">
+            <div class="split__col">
+              <div class="subhead">Truth Noise</div>
+
+              <div class="matrix">
+                <div class="matrix__title">Q_true (accel) [km²/s⁴]</div>
+                <div class="matrix__grid">
+                  <input id="qt11" type="number" step="1e-12" value="1e-10">
+                  <input id="qt12" type="number" step="1e-12" value="0">
+                  <input id="qt21" type="number" step="1e-12" value="0">
+                  <input id="qt22" type="number" step="1e-12" value="1e-10">
+                </div>
+              </div>
+
+              <div class="matrix">
+                <div class="matrix__title">R_true (meas) diag</div>
+                <div class="matrix__grid3">
+                  <label class="mini">
+                    <span>σρ (km)</span>
+                    <input id="rt_rho" type="number" step="0.001" value="0.02">
+                  </label>
+                  <label class="mini">
+                    <span>σρ̇ (km/s)</span>
+                    <input id="rt_rhod" type="number" step="0.0001" value="0.002">
+                  </label>
+                  <label class="mini">
+                    <span>σφ (rad)</span>
+                    <input id="rt_phi" type="number" step="0.0001" value="0.002">
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="split__col">
+              <div class="subhead">Filter Noise</div>
+
+              <div class="matrix">
+                <div class="matrix__title">Q_KF (accel) [km²/s⁴]</div>
+                <div class="matrix__grid">
+                  <input id="qk11" type="number" step="1e-12" value="1e-10">
+                  <input id="qk12" type="number" step="1e-12" value="0">
+                  <input id="qk21" type="number" step="1e-12" value="0">
+                  <input id="qk22" type="number" step="1e-10" value="1e-10">
+                </div>
+              </div>
+
+              <div class="matrix">
+                <div class="matrix__title">R_KF (meas) diag</div>
+                <div class="matrix__grid3">
+                  <label class="mini">
+                    <span>σρ (km)</span>
+                    <input id="rk_rho" type="number" step="0.001" value="0.02">
+                  </label>
+                  <label class="mini">
+                    <span>σρ̇ (km/s)</span>
+                    <input id="rk_rhod" type="number" step="0.0001" value="0.002">
+                  </label>
+                  <label class="mini">
+                    <span>σφ (rad)</span>
+                    <input id="rk_phi" type="number" step="0.0001" value="0.002">
+                  </label>
+                </div>
+              </div>
+
+              <label class="field">
+                <span class="field__label">P0 scale</span>
+                <input class="field__input" id="inpP0Scale" type="number" min="1e-10" max="1" step="1e-6" value="1e-6">
+                <span class="field__hint">Initial covariance magnitude.</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel__section">
+          <div class="panel__title">Maneuvers</div>
+
+          <div class="fieldgrid">
+            <label class="field">
+              <span class="field__label">Continuous accel ax (km/s²)</span>
+              <input class="field__input" id="inpAx" type="number" step="1e-6" value="0">
+              <span class="field__hint">Applied to truth + filter (assumed known).</span>
+            </label>
+
+            <label class="field">
+              <span class="field__label">Continuous accel ay (km/s²)</span>
+              <input class="field__input" id="inpAy" type="number" step="1e-6" value="0">
+              <span class="field__hint">Set back to 0 to stop thrust.</span>
+            </label>
+
+            <div class="row row--wrap">
+              <label class="field field--inline">
+                <span class="field__label">Δv prograde (km/s)</span>
+                <input class="field__input" id="inpDvPro" type="number" step="0.001" value="0.05">
+              </label>
+              <button class="btn" id="btnImpulsePro" type="button">Apply Δv</button>
+            </div>
+
+            <div class="row row--wrap">
+              <label class="field field--inline">
+                <span class="field__label">Set circular altitude (km)</span>
+                <input class="field__input" id="inpAlt" type="number" step="10" value="300">
+              </label>
+              <button class="btn" id="btnSetOrbit" type="button">Set Orbit</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel__section">
+          <div class="panel__title">Diagnostics</div>
+          <div class="diaggrid">
+            <div class="diag">
+              <div class="diag__k">NEES</div>
+              <div class="diag__v" id="readNEES">—</div>
+            </div>
+            <div class="diag">
+              <div class="diag__k">NIS</div>
+              <div class="diag__v" id="readNIS">—</div>
+            </div>
+            <div class="diag">
+              <div class="diag__k">Last innovation ‖v‖</div>
+              <div class="diag__v" id="readInnov">—</div>
+            </div>
+            <div class="diag">
+              <div class="diag__k">Last meas count</div>
+              <div class="diag__v" id="readMdim">—</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="viz">
+        <!-- Orbit window (draggable, zoom/pan) -->
+        <div id="orbitWindow" class="orbitwin" aria-label="Orbit view window">
+          <div id="orbitHeader" class="orbitwin__header" aria-label="Drag handle">
+            <div class="orbitwin__title">
+              <span class="chiplabel">ORBIT VIEW</span>
+              <span class="muted">drag • zoom • pan</span>
+            </div>
+            <div class="orbitwin__actions">
+              <button class="iconbtn" id="btnDock" type="button" title="Dock/Undock">Dock</button>
+              <button class="iconbtn" id="btnFit" type="button" title="Fit view">Fit</button>
+              <button class="iconbtn" id="btnResetView" type="button" title="Reset pan/zoom">Reset</button>
+            </div>
+          </div>
+
+          <div class="orbitwin__body">
+            <canvas id="orbitCanvas" class="orbitcanvas" aria-label="Orbit canvas"></canvas>
+            <div class="orbitwin__overlay" aria-hidden="true">
+              <div class="overlayrow">
+                <span class="leg leg--truth"></span> Truth
+                <span class="leg leg--ekf"></span> EKF
+                <span class="leg leg--pred"></span> 1-orbit free-prop
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Plots -->
+        <div class="plots">
+          <div class="plotbar" role="tablist" aria-label="Plot tabs">
+            <button class="tab is-on" data-tab="tabState" type="button" role="tab" aria-selected="true">State</button>
+            <button class="tab" data-tab="tabErr" type="button" role="tab" aria-selected="false">Errors</button>
+            <button class="tab" data-tab="tabMeas" type="button" role="tab" aria-selected="false">Measurements</button>
+            <button class="tab" data-tab="tabCons" type="button" role="tab" aria-selected="false">NEES / NIS</button>
+          </div>
+
+          <div class="plotwrap">
+            <div class="tabpane is-on" id="tabState" role="tabpanel">
+              <div class="plotgrid plotgrid--2x2">
+                <div class="plotcard">
+                  <div class="plotcard__title">X (km) • Truth vs EKF</div>
+                  <canvas class="plotcanvas" id="plotX"></canvas>
+                </div>
+                <div class="plotcard">
+                  <div class="plotcard__title">Ẋ (km/s) • Truth vs EKF</div>
+                  <canvas class="plotcanvas" id="plotXd"></canvas>
+                </div>
+                <div class="plotcard">
+                  <div class="plotcard__title">Y (km) • Truth vs EKF</div>
+                  <canvas class="plotcanvas" id="plotY"></canvas>
+                </div>
+                <div class="plotcard">
+                  <div class="plotcard__title">Ẏ (km/s) • Truth vs EKF</div>
+                  <canvas class="plotcanvas" id="plotYd"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <div class="tabpane" id="tabErr" role="tabpanel">
+              <div class="plotgrid plotgrid--2x2">
+                <div class="plotcard">
+                  <div class="plotcard__title">X error (km) with ±2σ</div>
+                  <canvas class="plotcanvas" id="plotEx"></canvas>
+                </div>
+                <div class="plotcard">
+                  <div class="plotcard__title">Ẋ error (km/s) with ±2σ</div>
+                  <canvas class="plotcanvas" id="plotExd"></canvas>
+                </div>
+                <div class="plotcard">
+                  <div class="plotcard__title">Y error (km) with ±2σ</div>
+                  <canvas class="plotcanvas" id="plotEy"></canvas>
+                </div>
+                <div class="plotcard">
+                  <div class="plotcard__title">Ẏ error (km/s) with ±2σ</div>
+                  <canvas class="plotcanvas" id="plotEyd"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <div class="tabpane" id="tabMeas" role="tabpanel">
+              <div class="plotgrid plotgrid--3x1">
+                <div class="plotcard">
+                  <div class="plotcard__title">Range ρ (km): Measurements (dots) vs EKF predicted (dots)</div>
+                  <canvas class="plotcanvas" id="plotRho"></canvas>
+                </div>
+                <div class="plotcard">
+                  <div class="plotcard__title">Range-rate ρ̇ (km/s): Measurements vs EKF predicted</div>
+                  <canvas class="plotcanvas" id="plotRhod"></canvas>
+                </div>
+                <div class="plotcard">
+                  <div class="plotcard__title">Angle φ (rad): Measurements vs EKF predicted</div>
+                  <canvas class="plotcanvas" id="plotPhi"></canvas>
+                </div>
+              </div>
+              <div class="note">
+                Station colors are consistent across plots. Angle innovations are wrapped to [-π, π].
+              </div>
+            </div>
+
+            <div class="tabpane" id="tabCons" role="tabpanel">
+              <div class="plotgrid plotgrid--2x1">
+                <div class="plotcard">
+                  <div class="plotcard__title">NEES (dof=4) with ~95% bounds</div>
+                  <canvas class="plotcanvas" id="plotNEES"></canvas>
+                </div>
+                <div class="plotcard">
+                  <div class="plotcard__title">NIS (dof = 3×visible) with ~95% bounds</div>
+                  <canvas class="plotcanvas" id="plotNIS"></canvas>
+                </div>
+              </div>
+              <div class="note">
+                Bounds use a fast chi-square quantile approximation (good enough for UI consistency checks).
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <!-- Help modal -->
+  <div class="modal" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+    <div class="modal__panel">
+      <div class="modal__head">
+        <div class="modal__title" id="helpTitle">How to use this simulator</div>
+        <button class="iconbtn" id="btnCloseHelp" type="button" aria-label="Close help">Close</button>
+      </div>
+      <div class="modal__body">
+        <ul class="bullets">
+          <li><b>Drag</b> the orbit window by its header. Use <b>Dock</b> to lock it into the layout.</li>
+          <li><b>Zoom</b> with mouse wheel/trackpad, or pinch on mobile. <b>Pan</b> by dragging inside the orbit canvas.</li>
+          <li>Each <b>dt</b> seconds of simulation time, visible stations generate measurements (ρ, ρ̇, φ). Pulses animate along links.</li>
+          <li>Change <b>Q/R</b> live for both truth and filter to show estimator robustness and mismatch behavior.</li>
+          <li>Use <b>Δv prograde</b> or continuous accel to perturb the orbit and watch the EKF track.</li>
+        </ul>
+        <div class="callout">
+          This is a portfolio demo: the point is to show physics + estimation + visualization + UI polish.
+          If you want even more “DSN Now” feel (antenna cards per station, mission labels, etc.), say so.
+        </div>
+      </div>
+    </div>
+    <div class="modal__backdrop" id="helpBackdrop" aria-hidden="true"></div>
   </div>
-</nav>
 
-<header class="hero">
-  <h1>Extended Kalman Filter Orbit Determination</h1>
-  <p>
-    Nonlinear two-body dynamics, rotating Earth ground stations,
-    noisy measurements, and real-time EKF state estimation.
-  </p>
-</header>
+  <footer class="footer">
+    <div class="footer__inner">
+      <span>© 2025 Jack Huston — Orbit Determination EKF Demo</span>
+      <span class="muted">Built for GitHub Pages • No external libraries</span>
+    </div>
+  </footer>
 
-<main class="layout">
-
-<section class="visual">
-  <canvas id="orbitCanvas"></canvas>
-  <div class="legend">
-    <span><i class="dot earth"></i> Earth</span>
-    <span><i class="dot sat"></i> Satellite</span>
-    <span><i class="dot est"></i> EKF Estimate</span>
-    <span><i class="dot station"></i> Ground Station</span>
-    <span><i class="dot link"></i> Active Measurement</span>
-  </div>
-</section>
-
-<aside class="controls">
-
-<section class="card">
-  <h2>Initial Orbit</h2>
-  <label>Altitude (km)
-    <input id="altitude" type="range" min="200" max="2000" step="10" value="300">
-  </label>
-</section>
-
-<section class="card">
-  <h2>EKF Parameters</h2>
-
-  <label>σ Position (km)
-    <input id="sigmaPos" type="number" step="1e-6" value="1e-6">
-  </label>
-
-  <label>σ Velocity (km/s)
-    <input id="sigmaVel" type="number" step="1e-6" value="1e-5">
-  </label>
-
-  <label>Process Noise (Q)
-    <input id="qScale" type="number" step="1e-12" value="1e-10">
-  </label>
-
-  <label>Measurement Noise (R)
-    <input id="rScale" type="number" step="1e-4" value="1e-3">
-  </label>
-</section>
-
-<section class="card">
-  <button id="startBtn" class="primary">
-    <i data-lucide="play"></i> Run
-  </button>
-  <button id="resetBtn">
-    <i data-lucide="rotate-ccw"></i> Reset
-  </button>
-</section>
-
-</aside>
-</main>
-
-<footer>
-  © 2025 Jack Huston — GN&C / Orbit Determination
-</footer>
-
-<script src="orbit-sim.js"></script>
-<script>lucide.createIcons();</script>
+  <script src="orbit-sim.js"></script>
 </body>
 </html>
