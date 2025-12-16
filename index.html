@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Orbit Determination & EKF Simulation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Reuse your global styles -->
+  <link rel="stylesheet" href="../styles.css" />
+
+  <!-- Simulation-specific styles -->
+  <link rel="stylesheet" href="orbit-sim.css" />
+
+  <!-- Icons (trusted CDN only) -->
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+</head>
+
+<body>
+  <!-- NAV -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="https://jack-huston.github.io/#projects" class="nav-back-btn">
+        <i data-lucide="arrow-left"></i>
+        <span>Back to Portfolio</span>
+      </a>
+
+      <div class="nav-brand">
+        <i data-lucide="satellite"></i>
+        <span>Orbit Determination</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- PAGE HEADER -->
+  <header class="sim-hero">
+    <h1>Extended Kalman Filter Orbit Simulation</h1>
+    <p>
+      Interactive nonlinear orbit propagation, ground-station tracking,
+      and EKF state estimation in real time.
+    </p>
+  </header>
+
+  <!-- MAIN LAYOUT -->
+  <main class="sim-layout">
+
+    <!-- LEFT: VISUAL SIMULATION -->
+    <section class="sim-visual">
+      <div class="canvas-wrapper">
+        <canvas id="orbitCanvas" aria-label="Orbit visualization canvas"></canvas>
+
+        <!-- Overlay labels (no JS logic yet) -->
+        <div class="canvas-overlay">
+          <span class="badge badge-earth">Earth</span>
+          <span class="badge badge-sat">Satellite</span>
+        </div>
+      </div>
+
+      <div class="sim-legend">
+        <div><span class="legend earth"></span> Earth</div>
+        <div><span class="legend sat"></span> Satellite</div>
+        <div><span class="legend traj"></span> Predicted Trajectory</div>
+        <div><span class="legend station"></span> Tracking Station</div>
+        <div><span class="legend link"></span> Active Measurement</div>
+      </div>
+    </section>
+
+    <!-- RIGHT: CONTROLS + PLOTS -->
+    <aside class="sim-controls">
+
+      <!-- CONTROL PANEL -->
+      <section class="control-card">
+        <h2>Simulation Controls</h2>
+
+        <div class="control-group">
+          <label>Initial Orbit Altitude (km)</label>
+          <input type="range" min="200" max="2000" step="10" value="300">
+        </div>
+
+        <div class="control-group">
+          <label>ΔV X (km/s)</label>
+          <input type="number" step="0.0001" value="0">
+        </div>
+
+        <div class="control-group">
+          <label>ΔV Y (km/s)</label>
+          <input type="number" step="0.0001" value="0">
+        </div>
+
+        <div class="button-row">
+          <button class="btn-primary">
+            <i data-lucide="play"></i>
+            Run Simulation
+          </button>
+          <button class="btn-secondary">
+            <i data-lucide="rotate-ccw"></i>
+            Reset
+          </button>
+        </div>
+      </section>
+
+      <!-- FILTER SETTINGS -->
+      <section class="control-card">
+        <h2>EKF Parameters</h2>
+
+        <div class="control-group">
+          <label>Initial Position σ (km)</label>
+          <input type="number" step="1e-6" value="1e-6">
+        </div>
+
+        <div class="control-group">
+          <label>Initial Velocity σ (km/s)</label>
+          <input type="number" step="1e-6" value="1e-5">
+        </div>
+
+        <div class="control-group">
+          <label>Process Noise Scale</label>
+          <input type="range" min="1e-12" max="1e-8" step="1e-12">
+        </div>
+      </section>
+
+      <!-- PLOTS -->
+      <section class="plot-card">
+        <h2>Measurements</h2>
+        <div class="plot-grid">
+          <div class="plot-placeholder">Range vs Time</div>
+          <div class="plot-placeholder">Range Rate vs Time</div>
+          <div class="plot-placeholder">Angle vs Time</div>
+        </div>
+      </section>
+
+      <section class="plot-card">
+        <h2>State Estimation</h2>
+        <div class="plot-grid">
+          <div class="plot-placeholder">X Position</div>
+          <div class="plot-placeholder">X Velocity</div>
+          <div class="plot-placeholder">Y Position</div>
+          <div class="plot-placeholder">Y Velocity</div>
+        </div>
+      </section>
+
+    </aside>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-content">
+      <span>© 2025 Jack Huston</span>
+      <i data-lucide="satellite"></i>
+      <span>Nonlinear Orbit Estimation & GN&C</span>
+    </div>
+  </footer>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
