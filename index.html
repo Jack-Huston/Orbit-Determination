@@ -4,382 +4,614 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="color-scheme" content="dark" />
+  <title>Orbit Determination • EKF Simulator</title>
 
-  <!-- Basic CSP for a static portfolio page (no external calls). -->
-  <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self';
-                 img-src 'self' data:;
-                 style-src 'self' 'unsafe-inline';
-                 script-src 'self';
-                 connect-src 'none';
-                 object-src 'none';
-                 base-uri 'self';
-                 form-action 'none'">
-
-  <title>Orbit Determination EKF Simulator</title>
+  <!--
+    Portfolio demo:
+    - All computation is client-side.
+    - No external libraries required.
+    - No network calls.
+  -->
   <link rel="stylesheet" href="orbit-sim.css" />
 </head>
 
 <body>
-  <header class="topbar" role="banner">
-    <div class="topbar__left">
-      <div class="brand">
-        <div class="brand__mark" aria-hidden="true"></div>
-        <div class="brand__text">
-          <div class="brand__title">ORBIT DETERMINATION</div>
-          <div class="brand__subtitle">Extended Kalman Filter • Switching Ground Stations • 2D Two-Body Dynamics</div>
-        </div>
+  <a class="skiplink" href="#main">Skip to content</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brandmark" aria-hidden="true"></div>
+      <div class="brandtext">
+        <div class="brandtitle">Orbit Determination</div>
+        <div class="brandsub">Extended Kalman Filter • Ground Station Switching • 2D Two-Body Dynamics</div>
       </div>
     </div>
 
-    <div class="topbar__right">
-      <div class="statusline" aria-live="polite">
-        <div class="statuspill" id="statusRun">PAUSED</div>
-        <div class="statuskv">
-          <span class="k">t</span>
-          <span class="v" id="readoutTime">0.0 s</span>
-        </div>
-        <div class="statuskv">
-          <span class="k">k</span>
-          <span class="v" id="readoutStep">0</span>
-        </div>
-        <div class="statuskv">
-          <span class="k">visible</span>
-          <span class="v" id="readoutVisible">0</span>
-        </div>
+    <div class="topbar-right">
+      <div class="statuspill" id="statusRun" role="status" aria-live="polite">PAUSED</div>
+
+      <div class="speedgroup" aria-label="Simulation speed">
+        <button class="chip" id="spd1"    data-speed="1"    type="button">1×</button>
+        <button class="chip" id="spd10"   data-speed="10"   type="button">10×</button>
+        <button class="chip" id="spd100"  data-speed="100"  type="button">100×</button>
+        <button class="chip" id="spd1000" data-speed="1000" type="button">1000×</button>
+      </div>
+
+      <div class="topbtns">
+        <button class="btn primary" id="btnToggleRun" type="button">Run</button>
+        <button class="btn" id="btnStep" type="button" title="Advance one measurement step">Step</button>
+        <button class="btn danger" id="btnReset" type="button">Reset</button>
       </div>
     </div>
   </header>
 
-  <main class="layout" role="main">
-    <!-- LEFT: controls + station board -->
-    <section class="sidebar" aria-label="Controls and station board">
-      <div class="panel">
-        <div class="panel__title">Simulation Controls</div>
-        <div class="panel__body">
-          <div class="row row--wrap">
-            <button class="btn btn--primary" id="btnToggleRun" type="button">Run</button>
-            <button class="btn" id="btnStep" type="button">Step +10s</button>
-            <button class="btn" id="btnReset" type="button">Reset</button>
-          </div>
+  <main id="main" class="app">
+    <!-- Left: controls (kept intentionally focused for a hiring-manager “play with it” experience) -->
+    <aside class="controlpanel" aria-label="Simulation controls">
+      <section class="panelcard">
+        <header class="panelhead">
+          <h2>Scenario</h2>
+          <p class="panelhint">
+            Define a valid 2D Earth orbit from orbital elements. Inputs are constrained to avoid Earth impact.
+          </p>
+        </header>
 
-          <div class="row row--wrap">
-            <div class="speedgroup" role="group" aria-label="Simulation speed">
-              <button class="chip" id="spd1" type="button" data-speed="1">1×</button>
-              <button class="chip" id="spd10" type="button" data-speed="10">10×</button>
-              <button class="chip" id="spd100" type="button" data-speed="100">100×</button>
-              <button class="chip" id="spd1000" type="button" data-speed="1000">1000×</button>
+        <div class="grid2">
+          <label class="field">
+            <span class="label">Periapsis altitude</span>
+            <span class="unitrow">
+              <input id="inpPeriAlt" type="number" inputmode="decimal" min="120" max="20000" step="10" value="300" />
+              <span class="unit">km</span>
+            </span>
+            <span class="help">Closest approach above Earth’s surface (min limited for atmosphere margin).</span>
+          </label>
+
+          <label class="field">
+            <span class="label">Eccentricity</span>
+            <input id="inpEcc" type="number" inputmode="decimal" min="0" max="0.85" step="0.01" value="0.00" />
+            <span class="help">0 = circular. Upper bound keeps orbit well-behaved for a DSN-style demo.</span>
+          </label>
+
+          <label class="field">
+            <span class="label">True anomaly</span>
+            <span class="unitrow">
+              <input id="inpTA" type="number" inputmode="decimal" min="-180" max="180" step="1" value="0" />
+              <span class="unit">deg</span>
+            </span>
+            <span class="help">Initial angle along the orbit measured from periapsis direction.</span>
+          </label>
+
+          <div class="field readonly">
+            <span class="label">Earth model</span>
+            <div class="readonlybox">
+              <div><span class="k">μ</span> = <span class="v">398600</span> km³/s²</div>
+              <div><span class="k">Rₑ</span> = <span class="v">6378</span> km</div>
+              <div><span class="k">ωₑ</span> = <span class="v">2π/86400</span> rad/s</div>
+              <div><span class="k">Δt</span> = <span class="v">10</span> s (measurement cadence)</div>
             </div>
-          </div>
-
-          <div class="grid2">
-            <div class="field">
-              <label for="inpDt">Δt (s)</label>
-              <input id="inpDt" type="number" inputmode="decimal" min="1" step="1" value="10" />
-              <div class="hint">Measurement cadence (also the EKF update cadence).</div>
-            </div>
-
-            <div class="field">
-              <label for="inpSteps">Max steps</label>
-              <input id="inpSteps" type="number" inputmode="numeric" min="50" step="50" value="1400" />
-              <div class="hint">Stops automatically at K steps.</div>
-            </div>
-          </div>
-
-          <div class="grid2">
-            <div class="field">
-              <label for="inpMu">μ (km³/s²)</label>
-              <input id="inpMu" type="number" inputmode="decimal" step="1" value="398600" />
-            </div>
-            <div class="field">
-              <label for="inpRe">Rₑ (km)</label>
-              <input id="inpRe" type="number" inputmode="decimal" step="1" value="6378" />
-            </div>
-          </div>
-
-          <div class="grid2">
-            <div class="field">
-              <label for="inpOmega">ωₑ (rad/s)</label>
-              <input id="inpOmega" type="number" inputmode="decimal" step="0.0000001" value="0.000072722052" />
-              <div class="hint">Default: 2π/86400.</div>
-            </div>
-            <div class="field">
-              <label for="inpSeed">Random seed</label>
-              <input id="inpSeed" type="number" inputmode="numeric" step="1" value="100" />
-              <div class="hint">Reproducible noise.</div>
-            </div>
-          </div>
-
-          <div class="divider"></div>
-
-          <details class="accordion" open>
-            <summary>Initial Conditions</summary>
-            <div class="accordion__body">
-              <div class="grid2">
-                <div class="field">
-                  <label for="inpAlt">Nominal altitude (km)</label>
-                  <input id="inpAlt" type="number" inputmode="decimal" step="1" value="300" />
-                  <div class="hint">Circular orbit baseline.</div>
-                </div>
-                <div class="field">
-                  <label for="inpVelFactor">Velocity factor</label>
-                  <input id="inpVelFactor" type="number" inputmode="decimal" step="0.01" value="1.00" />
-                  <div class="hint">1.00 = circular. &gt;1 faster, &lt;1 slower.</div>
-                </div>
-              </div>
-
-              <div class="grid2">
-                <div class="field">
-                  <label for="inpDx">ΔX (km)</label>
-                  <input id="inpDx" type="number" inputmode="decimal" step="0.1" value="0" />
-                </div>
-                <div class="field">
-                  <label for="inpDy">ΔY (km)</label>
-                  <input id="inpDy" type="number" inputmode="decimal" step="0.1" value="0" />
-                </div>
-              </div>
-
-              <div class="grid2">
-                <div class="field">
-                  <label for="inpDvx">ΔẊ (km/s)</label>
-                  <input id="inpDvx" type="number" inputmode="decimal" step="0.00001" value="0" />
-                </div>
-                <div class="field">
-                  <label for="inpDvy">ΔẎ (km/s)</label>
-                  <input id="inpDvy" type="number" inputmode="decimal" step="0.00001" value="0" />
-                </div>
-              </div>
-
-              <div class="row row--wrap">
-                <button class="btn" id="btnApplyIC" type="button">Apply IC + Reset</button>
-              </div>
-            </div>
-          </details>
-
-          <details class="accordion" open>
-            <summary>Noise (Truth Model)</summary>
-            <div class="accordion__body">
-              <div class="row row--wrap">
-                <label class="toggle">
-                  <input id="tglProcNoise" type="checkbox" checked />
-                  <span>Enable process noise</span>
-                </label>
-
-                <label class="toggle">
-                  <input id="tglMeasNoise" type="checkbox" checked />
-                  <span>Enable measurement noise</span>
-                </label>
-              </div>
-
-              <div class="grid2">
-                <div class="field">
-                  <label for="inpQtrueAx">Qtrue ax (km/s²)²</label>
-                  <input id="inpQtrueAx" type="number" inputmode="decimal" step="1e-12" value="1e-10" />
-                </div>
-                <div class="field">
-                  <label for="inpQtrueAy">Qtrue ay (km/s²)²</label>
-                  <input id="inpQtrueAy" type="number" inputmode="decimal" step="1e-12" value="1e-10" />
-                </div>
-              </div>
-
-              <div class="grid3">
-                <div class="field">
-                  <label for="inpRtrueRho">σρ (km)</label>
-                  <input id="inpRtrueRho" type="number" inputmode="decimal" step="0.001" value="0.01" />
-                </div>
-                <div class="field">
-                  <label for="inpRtrueRhod">σρ̇ (km/s)</label>
-                  <input id="inpRtrueRhod" type="number" inputmode="decimal" step="0.000001" value="0.0001" />
-                </div>
-                <div class="field">
-                  <label for="inpRtruePhi">σφ (rad)</label>
-                  <input id="inpRtruePhi" type="number" inputmode="decimal" step="0.000001" value="0.0005" />
-                </div>
-              </div>
-            </div>
-          </details>
-
-          <details class="accordion" open>
-            <summary>EKF Settings (Live)</summary>
-            <div class="accordion__body">
-              <div class="grid2">
-                <div class="field">
-                  <label for="inpSigX0">σx0 (km)</label>
-                  <input id="inpSigX0" type="number" inputmode="decimal" step="1e-6" value="1e-6" />
-                </div>
-                <div class="field">
-                  <label for="inpSigV0">σv0 (km/s)</label>
-                  <input id="inpSigV0" type="number" inputmode="decimal" step="1e-6" value="1e-5" />
-                </div>
-              </div>
-
-              <div class="grid2">
-                <div class="field">
-                  <label for="inpQkfAx">Qkf ax (km/s²)²</label>
-                  <input id="inpQkfAx" type="number" inputmode="decimal" step="1e-12" value="1e-10" />
-                  <div class="hint">Applied immediately (next prediction).</div>
-                </div>
-                <div class="field">
-                  <label for="inpQkfAy">Qkf ay (km/s²)²</label>
-                  <input id="inpQkfAy" type="number" inputmode="decimal" step="1e-12" value="1e-10" />
-                </div>
-              </div>
-
-              <div class="grid3">
-                <div class="field">
-                  <label for="inpRkfRho">σρ (km)</label>
-                  <input id="inpRkfRho" type="number" inputmode="decimal" step="0.001" value="0.01" />
-                  <div class="hint">Applied immediately (next update).</div>
-                </div>
-                <div class="field">
-                  <label for="inpRkfRhod">σρ̇ (km/s)</label>
-                  <input id="inpRkfRhod" type="number" inputmode="decimal" step="0.000001" value="0.0001" />
-                </div>
-                <div class="field">
-                  <label for="inpRkfPhi">σφ (rad)</label>
-                  <input id="inpRkfPhi" type="number" inputmode="decimal" step="0.000001" value="0.0005" />
-                </div>
-              </div>
-
-              <div class="grid2">
-                <div class="field">
-                  <label for="inpAlpha">Consistency α</label>
-                  <input id="inpAlpha" type="number" inputmode="decimal" step="0.01" min="0.01" max="0.20" value="0.05" />
-                  <div class="hint">Used for NEES/NIS confidence bounds.</div>
-                </div>
-
-                <div class="field">
-                  <label for="btnResetFilter">Filter</label>
-                  <button class="btn" id="btnResetFilter" type="button">Reset EKF only</button>
-                  <div class="hint">Keeps truth running; restarts EKF at current truth state.</div>
-                </div>
-              </div>
-            </div>
-          </details>
-
-          <details class="accordion">
-            <summary>Thrust / Disturbance (Optional)</summary>
-            <div class="accordion__body">
-              <div class="grid2">
-                <div class="field">
-                  <label for="inpUx">uₓ (km/s²)</label>
-                  <input id="inpUx" type="number" inputmode="decimal" step="1e-9" value="0" />
-                  <div class="hint">Applied to both truth + EKF dynamics (ZOH).</div>
-                </div>
-                <div class="field">
-                  <label for="inpUy">uᵧ (km/s²)</label>
-                  <input id="inpUy" type="number" inputmode="decimal" step="1e-9" value="0" />
-                </div>
-              </div>
-              <div class="hint">Leave at zero unless you want to demo controlled disturbances.</div>
-            </div>
-          </details>
-
-          <div class="divider"></div>
-
-          <div class="panel__title">Key Readouts</div>
-          <div class="kvgrid" aria-label="Key readouts">
-            <div class="kv"><div class="k">ρ</div><div class="v" id="roRho">—</div></div>
-            <div class="kv"><div class="k">ρ̇</div><div class="v" id="roRhod">—</div></div>
-            <div class="kv"><div class="k">φ</div><div class="v" id="roPhi">—</div></div>
-
-            <div class="kv"><div class="k">NEES</div><div class="v" id="roNEES">—</div></div>
-            <div class="kv"><div class="k">NIS</div><div class="v" id="roNIS">—</div></div>
-            <div class="kv"><div class="k">|e|</div><div class="v" id="roErrNorm">—</div></div>
+            <span class="help">Fixed constants for Earth orbit determination.</span>
           </div>
         </div>
-      </div>
 
-      <div class="panel panel--stations">
-        <div class="panel__title">Ground Stations (Switching Measurement Set)</div>
-        <div class="panel__body">
-          <div class="stationboard" id="stationBoard" aria-label="Station board"></div>
-          <div class="hint" style="margin-top:10px;">
-            Bright tiles are visible stations. A pulse indicates a measurement taken this step.
+        <div class="row">
+          <button class="btn" id="btnApplyIC" type="button">Apply Initial Orbit</button>
+          <button class="btn" id="btnResetFilter" type="button">Reset EKF Only</button>
+        </div>
+
+        <!-- Compatibility fields: retained so the current JS doesn’t break while we iterate.
+             These are intentionally non-interactive and will be removed once JS is updated. -->
+        <div class="compat hidden" aria-hidden="true">
+          <input id="inpAlt" type="number" value="300" />
+          <input id="inpVelFactor" type="number" value="1.0" />
+          <input id="inpDx" type="number" value="0" />
+          <input id="inpDy" type="number" value="0" />
+          <input id="inpDvx" type="number" value="0" />
+          <input id="inpDvy" type="number" value="0" />
+
+          <input id="inpDt" type="number" value="10" />
+          <input id="inpMu" type="number" value="398600" />
+          <input id="inpRe" type="number" value="6378" />
+          <input id="inpOmega" type="number" value="0.00007272205216643039" />
+          <input id="inpSeed" type="number" value="0" />
+        </div>
+      </section>
+
+      <section class="panelcard">
+        <header class="panelhead">
+          <h2>Thrust Control</h2>
+          <p class="panelhint">
+            Use the thrusters like a joystick to apply small accelerations (km/s²). When paused, you can inspect plots and then continue.
+          </p>
+        </header>
+
+        <div class="thrustlayout">
+          <div class="thrustpad" role="group" aria-label="Thruster controls">
+            <button class="padbtn up" id="btnThrustUp" type="button" aria-label="Thrust +Y">▲</button>
+            <button class="padbtn left" id="btnThrustLeft" type="button" aria-label="Thrust −X">◀</button>
+            <button class="padbtn center" id="btnThrustZero" type="button" aria-label="Zero thrust">●</button>
+            <button class="padbtn right" id="btnThrustRight" type="button" aria-label="Thrust +X">▶</button>
+            <button class="padbtn down" id="btnThrustDown" type="button" aria-label="Thrust −Y">▼</button>
+          </div>
+
+          <div class="thrustreadouts">
+            <label class="field">
+              <span class="label">Commanded acceleration</span>
+              <div class="readonlybox">
+                <div><span class="k">uₓ</span> = <span class="v" id="roUx">0</span> km/s²</div>
+                <div><span class="k">uᵧ</span> = <span class="v" id="roUy">0</span> km/s²</div>
+              </div>
+              <span class="help">Buttons apply short pulses; hold for continuous thrust (desktop) or tap repeatedly (mobile).</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Thrust magnitude limit</span>
+              <span class="unitrow">
+                <input id="inpUmax" type="number" inputmode="decimal" min="0" max="0.01" step="0.00001" value="0.00010" />
+                <span class="unit">km/s²</span>
+              </span>
+              <span class="help">Keeps controls realistic and prevents instantly destabilizing the filter.</span>
+            </label>
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- RIGHT: visualization + plots -->
-    <section class="vis" aria-label="Visualization and plots">
-      <div class="visgrid">
-        <!-- Draggable orbit card -->
-        <article class="card card--draggable" id="orbitCard" aria-label="Orbit viewport card">
-          <div class="card__header draghandle" id="orbitDragHandle" aria-label="Drag to move orbit window">
-            <div class="card__title">
-              Orbit View (Pan + Zoom)
-              <span class="sub">Drag canvas to pan • Wheel / pinch to zoom</span>
-            </div>
-            <div class="card__tools">
-              <button class="iconbtn" id="btnCenterView" type="button" title="Center view">⦿</button>
-              <button class="iconbtn" id="btnResetView" type="button" title="Reset zoom">⌖</button>
-              <button class="iconbtn" id="btnResetLayout" type="button" title="Reset window position">↺</button>
+        <!-- Compatibility inputs used by current JS (will be replaced by button/joystick model in JS update) -->
+        <div class="compat hidden" aria-hidden="true">
+          <input id="inpUx" type="number" value="0" />
+          <input id="inpUy" type="number" value="0" />
+        </div>
+
+        <div class="warnbox" id="impactGuard" hidden>
+          <div class="warntitle">Impact Guard</div>
+          <div class="warntext">
+            Thrust would push the spacecraft inside Earth’s radius. Controls have been limited to keep the orbit valid.
+          </div>
+        </div>
+      </section>
+
+      <section class="panelcard">
+        <header class="panelhead">
+          <h2>Noise & Filter Settings</h2>
+          <p class="panelhint">
+            Adjust the truth noise (data generation) and EKF assumed noise (modeling). Diagonal entries shown; units are baked into each quantity.
+          </p>
+        </header>
+
+        <div class="toggles">
+          <label class="toggle">
+            <input id="tglProcNoise" type="checkbox" checked />
+            <span>Process noise (truth)</span>
+          </label>
+          <label class="toggle">
+            <input id="tglMeasNoise" type="checkbox" checked />
+            <span>Measurement noise (truth)</span>
+          </label>
+        </div>
+
+        <details class="details" open>
+          <summary>Truth noise (data generation)</summary>
+          <div class="grid2">
+            <label class="field">
+              <span class="label">Acceleration noise σ<sub>a,x</sub></span>
+              <span class="unitrow">
+                <input id="inpQtrueAx" type="number" inputmode="decimal" min="0" step="1e-12" value="1e-10" />
+                <span class="unit">(km/s²)²</span>
+              </span>
+              <span class="help">Variance of unmodeled acceleration along +X in the truth model.</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Acceleration noise σ<sub>a,y</sub></span>
+              <span class="unitrow">
+                <input id="inpQtrueAy" type="number" inputmode="decimal" min="0" step="1e-12" value="1e-10" />
+                <span class="unit">(km/s²)²</span>
+              </span>
+              <span class="help">Variance of unmodeled acceleration along +Y in the truth model.</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Range noise σ<sub>ρ</sub></span>
+              <span class="unitrow">
+                <input id="inpRtrueRho" type="number" inputmode="decimal" min="0" step="0.001" value="0.05" />
+                <span class="unit">km</span>
+              </span>
+              <span class="help">Standard deviation of range measurement noise per station.</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Range-rate noise σ<sub>ρ̇</sub></span>
+              <span class="unitrow">
+                <input id="inpRtrueRhod" type="number" inputmode="decimal" min="0" step="1e-6" value="5e-4" />
+                <span class="unit">km/s</span>
+              </span>
+              <span class="help">Standard deviation of range-rate measurement noise per station.</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Angle noise σ<sub>φ</sub></span>
+              <span class="unitrow">
+                <input id="inpRtruePhi" type="number" inputmode="decimal" min="0" step="1e-6" value="0.002" />
+                <span class="unit">rad</span>
+              </span>
+              <span class="help">Standard deviation of bearing angle measurement noise per station.</span>
+            </label>
+          </div>
+        </details>
+
+        <details class="details" open>
+          <summary>EKF assumed noise (tuning)</summary>
+          <div class="grid2">
+            <label class="field">
+              <span class="label">Assumed accel variance q<sub>x</sub></span>
+              <span class="unitrow">
+                <input id="inpQkfAx" type="number" inputmode="decimal" min="0" step="1e-12" value="1e-10" />
+                <span class="unit">(km/s²)²</span>
+              </span>
+              <span class="help">Too small ⇒ overconfident predictions; too large ⇒ noisy estimates.</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Assumed accel variance q<sub>y</sub></span>
+              <span class="unitrow">
+                <input id="inpQkfAy" type="number" inputmode="decimal" min="0" step="1e-12" value="1e-10" />
+                <span class="unit">(km/s²)²</span>
+              </span>
+              <span class="help">Controls how quickly the EKF “forgives” dynamics mismatch.</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Assumed σ<sub>ρ</sub></span>
+              <span class="unitrow">
+                <input id="inpRkfRho" type="number" inputmode="decimal" min="0" step="0.001" value="0.05" />
+                <span class="unit">km</span>
+              </span>
+              <span class="help">Larger values down-weight range measurements.</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Assumed σ<sub>ρ̇</sub></span>
+              <span class="unitrow">
+                <input id="inpRkfRhod" type="number" inputmode="decimal" min="0" step="1e-6" value="5e-4" />
+                <span class="unit">km/s</span>
+              </span>
+              <span class="help">Larger values down-weight range-rate measurements.</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Assumed σ<sub>φ</sub></span>
+              <span class="unitrow">
+                <input id="inpRkfPhi" type="number" inputmode="decimal" min="0" step="1e-6" value="0.002" />
+                <span class="unit">rad</span>
+              </span>
+              <span class="help">Larger values down-weight bearing measurements.</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Consistency test α</span>
+              <input id="inpAlpha" type="number" inputmode="decimal" min="0.01" max="0.2" step="0.01" value="0.05" />
+              <span class="help">NEES/NIS χ² bounds use this significance level.</span>
+            </label>
+          </div>
+        </details>
+
+        <div class="row">
+          <label class="field inline">
+            <span class="label">Max steps</span>
+            <span class="unitrow">
+              <input id="inpSteps" type="number" inputmode="numeric" min="50" step="1000" value="1000000" />
+              <span class="unit">steps</span>
+            </span>
+          </label>
+          <div class="microhint">
+            Set very large to run indefinitely; simulation stops when you pause or reset.
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Right: visualization + plots -->
+    <section class="vizpanel" aria-label="Visualization and plots">
+      <!-- Orbit view (stationary container; pan/zoom inside the plot) -->
+      <section class="orbitcard" id="orbitCard" aria-label="Orbit view">
+        <!-- Drag handle retained (hidden) so existing JS doesn’t crash while we iterate. -->
+        <div class="orbitdrag hidden" id="orbitDragHandle" aria-hidden="true"></div>
+
+        <header class="orbithead">
+          <div class="orbithead-left">
+            <h2>Orbit View</h2>
+            <div class="subreadouts">
+              <div class="ro"><span class="k">t</span> <span id="readoutTime">0.0 s</span></div>
+              <div class="ro"><span class="k">step</span> <span id="readoutStep">0</span></div>
+              <div class="ro"><span class="k">visible</span> <span id="readoutVisible">0</span></div>
             </div>
           </div>
-          <div class="card__body">
-            <canvas id="orbitCanvas" width="640" height="420" aria-label="Orbit canvas"></canvas>
-            <div class="orbitlegend" aria-hidden="true">
-              <div><span class="sw sw--truth"></span>Truth</div>
-              <div><span class="sw sw--est"></span>EKF</div>
-              <div><span class="sw sw--sig"></span>Signal</div>
-              <div><span class="sw sw--sta"></span>Station</div>
+
+          <div class="orbithead-right">
+            <button class="iconbtn" id="btnZoomCraft" type="button" title="Zoom to spacecraft">Zoom to craft</button>
+            <button class="iconbtn" id="btnCenterView" type="button" title="Center view on Earth">Center</button>
+            <button class="iconbtn" id="btnResetView" type="button" title="Reset pan/zoom">Reset view</button>
+
+            <!-- Layout reset button retained (hidden) for compatibility; window itself should remain stationary. -->
+            <button class="iconbtn hidden" id="btnResetLayout" type="button" aria-hidden="true">Reset layout</button>
+          </div>
+        </header>
+
+        <div class="orbitwrap">
+          <canvas id="orbitCanvas" class="orbitcanvas" aria-label="Orbit visualization canvas"></canvas>
+
+          <!-- Quick legend / interpretation -->
+          <div class="orbitlegend" aria-hidden="false">
+            <div class="legendrow">
+              <span class="swatch truth"></span><span>Truth</span>
+              <span class="swatch est"></span><span>EKF</span>
+              <span class="swatch cov"></span><span>2σ ellipse</span>
+              <span class="swatch sig"></span><span>Measurement link</span>
+            </div>
+            <div class="legendrow small">
+              Dashed forward path: 1-orbit “no-thrust” prediction from current estimate.
             </div>
           </div>
-        </article>
+        </div>
 
-        <!-- Tabs for plots -->
-        <article class="card card--plots" aria-label="Plots">
-          <div class="card__header">
-            <div class="tabs" role="tablist" aria-label="Plot tabs">
-              <button class="tab is-active" role="tab" aria-selected="true" id="tabStates" data-tab="states" type="button">States</button>
-              <button class="tab" role="tab" aria-selected="false" id="tabErrors" data-tab="errors" type="button">Errors</button>
-              <button class="tab" role="tab" aria-selected="false" id="tabMeas" data-tab="meas" type="button">Measurements</button>
-              <button class="tab" role="tab" aria-selected="false" id="tabTraj" data-tab="traj" type="button">Trajectory</button>
-              <button class="tab" role="tab" aria-selected="false" id="tabCons" data-tab="cons" type="button">Consistency</button>
+        <div class="orbitreadoutbar" aria-label="Live measurement and consistency readouts">
+          <div class="rbox">
+            <div class="rt">Measurement (latest)</div>
+            <div class="rv">
+              <span class="k">ρ</span> <span id="roRho">—</span>
+              <span class="k">ρ̇</span> <span id="roRhod">—</span>
+              <span class="k">φ</span> <span id="roPhi">—</span>
             </div>
           </div>
 
-          <div class="card__body card__body--plots">
-            <div class="plotpane is-active" id="pane-states" role="tabpanel" aria-labelledby="tabStates">
-              <canvas id="plotStates" width="980" height="520" aria-label="States plot"></canvas>
-              <div class="plotnote">Truth vs EKF estimate with ±2σ bounds (matches your MATLAB Plot 1).</div>
-            </div>
-
-            <div class="plotpane" id="pane-errors" role="tabpanel" aria-labelledby="tabErrors">
-              <canvas id="plotErrors" width="980" height="520" aria-label="Errors plot"></canvas>
-              <div class="plotnote">EKF estimation error with ±2σ bounds (matches your MATLAB Plot 2).</div>
-            </div>
-
-            <div class="plotpane" id="pane-meas" role="tabpanel" aria-labelledby="tabMeas">
-              <canvas id="plotMeas" width="980" height="520" aria-label="Measurements plot"></canvas>
-              <div class="plotnote">Noisy measurements vs EKF predicted measurements (matches your MATLAB Plot 3).</div>
-            </div>
-
-            <div class="plotpane" id="pane-traj" role="tabpanel" aria-labelledby="tabTraj">
-              <canvas id="plotTraj" width="980" height="520" aria-label="Trajectory plot"></canvas>
-              <div class="plotnote">True vs EKF XY trajectory, Earth disk, and station ring (matches your MATLAB Plot 4).</div>
-            </div>
-
-            <div class="plotpane" id="pane-cons" role="tabpanel" aria-labelledby="tabCons">
-              <canvas id="plotCons" width="980" height="520" aria-label="Consistency plot"></canvas>
-              <div class="plotnote">NEES and NIS consistency diagnostics (portfolio-grade validation).</div>
+          <div class="rbox">
+            <div class="rt">Consistency</div>
+            <div class="rv">
+              <span class="k">NEES</span> <span id="roNEES">—</span>
+              <span class="k">NIS</span> <span id="roNIS">—</span>
+              <span class="k">‖err‖</span> <span id="roErrNorm">—</span>
             </div>
           </div>
-        </article>
-      </div>
+        </div>
+      </section>
+
+      <!-- Plot tabs -->
+      <section class="plotcard">
+        <header class="plothead">
+          <div class="tabs" role="tablist" aria-label="Plot selection">
+            <button class="tab is-active" data-tab="states" type="button" role="tab" aria-selected="true">States</button>
+            <button class="tab" data-tab="errors" type="button" role="tab">Errors</button>
+            <button class="tab" data-tab="meas" type="button" role="tab">Measurements</button>
+            <button class="tab" data-tab="cons" type="button" role="tab">Consistency</button>
+
+            <!-- Retained for compatibility with current JS; hidden to avoid redundant trajectory plot -->
+            <button class="tab hidden" id="tabTrajHidden" data-tab="traj" type="button" role="tab" aria-hidden="true">Trajectory</button>
+          </div>
+
+          <div class="plothint">
+            Tip: Pause to inspect. (Next update: pan/zoom on plots when paused.)
+          </div>
+        </header>
+
+        <div class="plotbody">
+          <!-- States -->
+          <section class="pane is-active" id="pane-states" role="tabpanel" aria-label="State time histories">
+            <div class="panehead">
+              <div class="panetitle">Truth vs EKF estimate with ±2σ bounds</div>
+              <div class="panesub">
+                Axes: time (s) on X. State units: X,Y in km; Ẋ,Ẏ in km/s.
+              </div>
+            </div>
+            <canvas id="plotStates" class="plotcanvas" aria-label="States plot"></canvas>
+          </section>
+
+          <!-- Errors -->
+          <section class="pane" id="pane-errors" role="tabpanel" aria-label="Error time histories">
+            <div class="panehead">
+              <div class="panetitle">Estimation error with ±2σ bounds</div>
+              <div class="panesub">
+                Axes: time (s) on X. Error units match the state.
+              </div>
+            </div>
+            <canvas id="plotErrors" class="plotcanvas" aria-label="Errors plot"></canvas>
+          </section>
+
+          <!-- Measurements + Station board (DSN-style) -->
+          <section class="pane" id="pane-meas" role="tabpanel" aria-label="Measurements and ground stations">
+            <div class="panehead">
+              <div class="panetitle">Measurements vs time</div>
+              <div class="panesub">
+                Range ρ (km), range-rate ρ̇ (km/s), angle φ (rad). Points colored by tracking station.
+              </div>
+            </div>
+
+            <div class="measlayout">
+              <div class="measplots">
+                <canvas id="plotMeas" class="plotcanvas" aria-label="Measurements plot"></canvas>
+
+                <div class="measlegend" aria-label="Station color legend">
+                  <div class="legendtitle">Tracking station colors</div>
+                  <div class="legendgrid" id="stationLegend">
+                    <!-- Filled by JS with station color chips -->
+                  </div>
+                </div>
+              </div>
+
+              <aside class="stationpanel" aria-label="Ground station switching measurement set">
+                <header class="stationhead2">
+                  <h3>Ground Stations</h3>
+                  <div class="stationhint">
+                    Highlights indicate visibility; animated line indicates live measurement transmission.
+                  </div>
+                </header>
+
+                <div class="stationBoard" id="stationBoard">
+                  <!-- Static tiles so the SVG can be controlled precisely.
+                       JS will update classes + per-station colors + signal animation. -->
+
+                  <!-- Station tile template (repeated 12x) -->
+                  <div class="stationtile" id="st-1" data-station="1">
+                    <div class="stationhead">
+                      <div class="stationname">STATION 01</div>
+                      <div class="stationmeta" id="stmeta-1">—</div>
+                    </div>
+
+                    <!-- Dish icon (upright: bowl opening upward) -->
+                    <div class="dishicon" aria-hidden="true">
+                      <svg viewBox="0 0 120 34" focusable="false">
+                        <!-- Bowl (upright) -->
+                        <path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path>
+                        <path class="dishline" d="M 12 26 Q 60 2 108 26"></path>
+                        <!-- Feed/support -->
+                        <path class="dishline" d="M 60 26 L 60 10"></path>
+                        <path class="dishline" d="M 60 10 L 50 6"></path>
+                        <path class="dishline" d="M 60 10 L 70 6"></path>
+                        <!-- Base -->
+                        <path class="dishline" d="M 54 26 L 54 32"></path>
+                        <path class="dishline" d="M 66 26 L 66 32"></path>
+                      </svg>
+                    </div>
+
+                    <!-- Signal badge -->
+                    <div class="lightning" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path>
+                      </svg>
+                    </div>
+
+                    <!-- “Data squiggle” line placeholder (animated in CSS/JS; colored per station) -->
+                    <div class="datasquiggle" aria-hidden="true">
+                      <svg viewBox="0 0 120 18" focusable="false" preserveAspectRatio="none">
+                        <path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path>
+                      </svg>
+                    </div>
+                  </div>
+
+                  <!-- Repeat stations 2..12 -->
+                  <div class="stationtile" id="st-2" data-station="2">
+                    <div class="stationhead"><div class="stationname">STATION 02</div><div class="stationmeta" id="stmeta-2">—</div></div>
+                    <div class="dishicon" aria-hidden="true">
+                      <svg viewBox="0 0 120 34" focusable="false">
+                        <path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path>
+                        <path class="dishline" d="M 12 26 Q 60 2 108 26"></path>
+                        <path class="dishline" d="M 60 26 L 60 10"></path>
+                        <path class="dishline" d="M 60 10 L 50 6"></path>
+                        <path class="dishline" d="M 60 10 L 70 6"></path>
+                        <path class="dishline" d="M 54 26 L 54 32"></path>
+                        <path class="dishline" d="M 66 26 L 66 32"></path>
+                      </svg>
+                    </div>
+                    <div class="lightning" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false"><path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path></svg>
+                    </div>
+                    <div class="datasquiggle" aria-hidden="true">
+                      <svg viewBox="0 0 120 18" focusable="false" preserveAspectRatio="none">
+                        <path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path>
+                      </svg>
+                    </div>
+                  </div>
+
+                  <div class="stationtile" id="st-3" data-station="3">
+                    <div class="stationhead"><div class="stationname">STATION 03</div><div class="stationmeta" id="stmeta-3">—</div></div>
+                    <div class="dishicon" aria-hidden="true"><svg viewBox="0 0 120 34"><path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path><path class="dishline" d="M 12 26 Q 60 2 108 26"></path><path class="dishline" d="M 60 26 L 60 10"></path><path class="dishline" d="M 60 10 L 50 6"></path><path class="dishline" d="M 60 10 L 70 6"></path><path class="dishline" d="M 54 26 L 54 32"></path><path class="dishline" d="M 66 26 L 66 32"></path></svg></div>
+                    <div class="lightning" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path></svg></div>
+                    <div class="datasquiggle" aria-hidden="true"><svg viewBox="0 0 120 18" preserveAspectRatio="none"><path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path></svg></div>
+                  </div>
+
+                  <div class="stationtile" id="st-4" data-station="4">
+                    <div class="stationhead"><div class="stationname">STATION 04</div><div class="stationmeta" id="stmeta-4">—</div></div>
+                    <div class="dishicon" aria-hidden="true"><svg viewBox="0 0 120 34"><path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path><path class="dishline" d="M 12 26 Q 60 2 108 26"></path><path class="dishline" d="M 60 26 L 60 10"></path><path class="dishline" d="M 60 10 L 50 6"></path><path class="dishline" d="M 60 10 L 70 6"></path><path class="dishline" d="M 54 26 L 54 32"></path><path class="dishline" d="M 66 26 L 66 32"></path></svg></div>
+                    <div class="lightning" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path></svg></div>
+                    <div class="datasquiggle" aria-hidden="true"><svg viewBox="0 0 120 18" preserveAspectRatio="none"><path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path></svg></div>
+                  </div>
+
+                  <div class="stationtile" id="st-5" data-station="5">
+                    <div class="stationhead"><div class="stationname">STATION 05</div><div class="stationmeta" id="stmeta-5">—</div></div>
+                    <div class="dishicon" aria-hidden="true"><svg viewBox="0 0 120 34"><path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path><path class="dishline" d="M 12 26 Q 60 2 108 26"></path><path class="dishline" d="M 60 26 L 60 10"></path><path class="dishline" d="M 60 10 L 50 6"></path><path class="dishline" d="M 60 10 L 70 6"></path><path class="dishline" d="M 54 26 L 54 32"></path><path class="dishline" d="M 66 26 L 66 32"></path></svg></div>
+                    <div class="lightning" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path></svg></div>
+                    <div class="datasquiggle" aria-hidden="true"><svg viewBox="0 0 120 18" preserveAspectRatio="none"><path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path></svg></div>
+                  </div>
+
+                  <div class="stationtile" id="st-6" data-station="6">
+                    <div class="stationhead"><div class="stationname">STATION 06</div><div class="stationmeta" id="stmeta-6">—</div></div>
+                    <div class="dishicon" aria-hidden="true"><svg viewBox="0 0 120 34"><path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path><path class="dishline" d="M 12 26 Q 60 2 108 26"></path><path class="dishline" d="M 60 26 L 60 10"></path><path class="dishline" d="M 60 10 L 50 6"></path><path class="dishline" d="M 60 10 L 70 6"></path><path class="dishline" d="M 54 26 L 54 32"></path><path class="dishline" d="M 66 26 L 66 32"></path></svg></div>
+                    <div class="lightning" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path></svg></div>
+                    <div class="datasquiggle" aria-hidden="true"><svg viewBox="0 0 120 18" preserveAspectRatio="none"><path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path></svg></div>
+                  </div>
+
+                  <div class="stationtile" id="st-7" data-station="7">
+                    <div class="stationhead"><div class="stationname">STATION 07</div><div class="stationmeta" id="stmeta-7">—</div></div>
+                    <div class="dishicon" aria-hidden="true"><svg viewBox="0 0 120 34"><path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path><path class="dishline" d="M 12 26 Q 60 2 108 26"></path><path class="dishline" d="M 60 26 L 60 10"></path><path class="dishline" d="M 60 10 L 50 6"></path><path class="dishline" d="M 60 10 L 70 6"></path><path class="dishline" d="M 54 26 L 54 32"></path><path class="dishline" d="M 66 26 L 66 32"></path></svg></div>
+                    <div class="lightning" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path></svg></div>
+                    <div class="datasquiggle" aria-hidden="true"><svg viewBox="0 0 120 18" preserveAspectRatio="none"><path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path></svg></div>
+                  </div>
+
+                  <div class="stationtile" id="st-8" data-station="8">
+                    <div class="stationhead"><div class="stationname">STATION 08</div><div class="stationmeta" id="stmeta-8">—</div></div>
+                    <div class="dishicon" aria-hidden="true"><svg viewBox="0 0 120 34"><path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path><path class="dishline" d="M 12 26 Q 60 2 108 26"></path><path class="dishline" d="M 60 26 L 60 10"></path><path class="dishline" d="M 60 10 L 50 6"></path><path class="dishline" d="M 60 10 L 70 6"></path><path class="dishline" d="M 54 26 L 54 32"></path><path class="dishline" d="M 66 26 L 66 32"></path></svg></div>
+                    <div class="lightning" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path></svg></div>
+                    <div class="datasquiggle" aria-hidden="true"><svg viewBox="0 0 120 18" preserveAspectRatio="none"><path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path></svg></div>
+                  </div>
+
+                  <div class="stationtile" id="st-9" data-station="9">
+                    <div class="stationhead"><div class="stationname">STATION 09</div><div class="stationmeta" id="stmeta-9">—</div></div>
+                    <div class="dishicon" aria-hidden="true"><svg viewBox="0 0 120 34"><path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path><path class="dishline" d="M 12 26 Q 60 2 108 26"></path><path class="dishline" d="M 60 26 L 60 10"></path><path class="dishline" d="M 60 10 L 50 6"></path><path class="dishline" d="M 60 10 L 70 6"></path><path class="dishline" d="M 54 26 L 54 32"></path><path class="dishline" d="M 66 26 L 66 32"></path></svg></div>
+                    <div class="lightning" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path></svg></div>
+                    <div class="datasquiggle" aria-hidden="true"><svg viewBox="0 0 120 18" preserveAspectRatio="none"><path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path></svg></div>
+                  </div>
+
+                  <div class="stationtile" id="st-10" data-station="10">
+                    <div class="stationhead"><div class="stationname">STATION 10</div><div class="stationmeta" id="stmeta-10">—</div></div>
+                    <div class="dishicon" aria-hidden="true"><svg viewBox="0 0 120 34"><path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path><path class="dishline" d="M 12 26 Q 60 2 108 26"></path><path class="dishline" d="M 60 26 L 60 10"></path><path class="dishline" d="M 60 10 L 50 6"></path><path class="dishline" d="M 60 10 L 70 6"></path><path class="dishline" d="M 54 26 L 54 32"></path><path class="dishline" d="M 66 26 L 66 32"></path></svg></div>
+                    <div class="lightning" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path></svg></div>
+                    <div class="datasquiggle" aria-hidden="true"><svg viewBox="0 0 120 18" preserveAspectRatio="none"><path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path></svg></div>
+                  </div>
+
+                  <div class="stationtile" id="st-11" data-station="11">
+                    <div class="stationhead"><div class="stationname">STATION 11</div><div class="stationmeta" id="stmeta-11">—</div></div>
+                    <div class="dishicon" aria-hidden="true"><svg viewBox="0 0 120 34"><path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path><path class="dishline" d="M 12 26 Q 60 2 108 26"></path><path class="dishline" d="M 60 26 L 60 10"></path><path class="dishline" d="M 60 10 L 50 6"></path><path class="dishline" d="M 60 10 L 70 6"></path><path class="dishline" d="M 54 26 L 54 32"></path><path class="dishline" d="M 66 26 L 66 32"></path></svg></div>
+                    <div class="lightning" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path></svg></div>
+                    <div class="datasquiggle" aria-hidden="true"><svg viewBox="0 0 120 18" preserveAspectRatio="none"><path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path></svg></div>
+                  </div>
+
+                  <div class="stationtile" id="st-12" data-station="12">
+                    <div class="stationhead"><div class="stationname">STATION 12</div><div class="stationmeta" id="stmeta-12">—</div></div>
+                    <div class="dishicon" aria-hidden="true"><svg viewBox="0 0 120 34"><path class="dishfill" d="M 12 26 Q 60 2 108 26 Q 60 32 12 26 Z"></path><path class="dishline" d="M 12 26 Q 60 2 108 26"></path><path class="dishline" d="M 60 26 L 60 10"></path><path class="dishline" d="M 60 10 L 50 6"></path><path class="dishline" d="M 60 10 L 70 6"></path><path class="dishline" d="M 54 26 L 54 32"></path><path class="dishline" d="M 66 26 L 66 32"></path></svg></div>
+                    <div class="lightning" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 12-15h-7l-1-5z"></path></svg></div>
+                    <div class="datasquiggle" aria-hidden="true"><svg viewBox="0 0 120 18" preserveAspectRatio="none"><path class="squigglepath" d="M0,9 C10,2 20,16 30,9 C40,2 50,16 60,9 C70,2 80,16 90,9 C100,2 110,16 120,9"></path></svg></div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <!-- Consistency -->
+          <section class="pane" id="pane-cons" role="tabpanel" aria-label="Consistency plots">
+            <div class="panehead">
+              <div class="panetitle">Filter consistency diagnostics</div>
+              <div class="panesub">
+                NEES uses df=4. NIS uses df = 3 × (# visible stations).
+              </div>
+            </div>
+            <canvas id="plotCons" class="plotcanvas" aria-label="Consistency plot"></canvas>
+          </section>
+
+          <!-- Compatibility pane: hidden trajectory plot canvas retained to avoid breaking current JS -->
+          <section class="pane hidden" id="pane-traj" role="tabpanel" aria-hidden="true">
+            <canvas id="plotTraj" class="plotcanvas" aria-label="Hidden trajectory plot"></canvas>
+          </section>
+        </div>
+      </section>
     </section>
   </main>
 
   <footer class="footer">
-    <div class="footer__left">
-      Portfolio demo: physics + estimation + switching measurement sets • No external libraries • Runs fully client-side.
+    <div class="footleft">
+      <span class="muted">Client-side simulation • No uploads • No tracking</span>
     </div>
-    <div class="footer__right">
-      Tip: Set speed to 10× or 100× for fast demos. Use 1× for “real-time” cadence.
+    <div class="footright">
+      <span class="muted">Controls: Run/Pause, Speed, Thrusters, Noise tuning</span>
     </div>
   </footer>
 
-  <script src="orbit-sim.js"></script>
+  <script defer src="orbit-sim.js"></script>
 </body>
 </html>
