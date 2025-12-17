@@ -1,11 +1,10 @@
 /* orbit-sim.js
-   Orbit + EKF demo (2D, Earth-centric). No external libraries.
-   - Physics: 2-body gravity + user thrust (acceleration) + optional process noise
-   - Measurements: range, range-rate, bearing from visible ground stations + optional noise
-   - Estimation: Extended Kalman Filter with linearized covariance propagation
+   Client-side orbit + EKF simulator (2D).
+   No external libs, no network calls, no eval.
 
-   This file is written to be resilient: if a UI element is missing in the HTML,
-   the simulator still runs and simply skips that feature.
+   This file assumes index.html provides the UI elements by id/class.
+   If an element is missing (e.g., you rename an id), the simulator will
+   continue running; that feature just becomes inactive until the id matches.
 */
 (() => {
   "use strict";
@@ -14,6 +13,7 @@
   // DOM helpers
   // -----------------------------
   const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
   function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
   function fmt(x, digits = 3) {
@@ -30,7 +30,12 @@
     return x;
   }
 
-  // Deterministic RNG (Mulberry32) + Box-Muller normal
+  function safeText(el, s) { if (el) el.textContent = s; }
+  function safeToggle(el, cls, on) { if (el) el.classList.toggle(cls, !!on); }
+
+  // -----------------------------
+  // RNG: Mulberry32 + Box-Muller
+  // -----------------------------
   function mulberry32(seed) {
     let a = seed >>> 0;
     return function () {
@@ -61,7 +66,7 @@
   }
 
   // -----------------------------
-  // Small linear algebra (dense, Float64)
+  // Small linear algebra (dense)
   // -----------------------------
   function zeros(r, c) {
     const A = new Array(r);
@@ -151,7 +156,7 @@
         const v = Math.abs(M[r][col]);
         if (v > best) { best = v; pivotRow = r; }
       }
-      if (best < 1e-18) throw new Error("Singular matrix.");
+      if (best < 1e-18) throw new Error("Singular matrix in inversion.");
       if (pivotRow !== col) {
         const tmp = M[col]; M[col] = M[pivotRow]; M[pivotRow] = tmp;
       }
@@ -178,7 +183,7 @@
   }
 
   // -----------------------------
-  // Stats: normal quantile & chi-square bounds (Wilson-Hilferty)
+  // Statistics: inverse normal + chi-square approx
   // -----------------------------
   function normInv(p) {
     const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
@@ -207,6 +212,7 @@
     return (((((a[0]*r + a[1])*r + a[2])*r + a[3])*r + a[4])*r + a[5]) * q /
            (((((b[0]*r + b[1])*r + b[2])*r + b[3])*r + b[4])*r + 1);
   }
+
   function chi2Inv(p, k) {
     const z = normInv(p);
     const a = 2 / (9 * k);
@@ -215,21 +221,11 @@
   }
 
   // -----------------------------
-  // Earth constants (not user-tunable)
-  // -----------------------------
-  const CONST = Object.freeze({
-    mu: 398600.0,          // km^3/s^2
-    Re: 6378.0,            // km
-    omega: 2 * Math.PI / 86400, // rad/s
-    dt: 10.0,              // seconds per step (measurement cadence)
-    minAlt: 120.0          // km safety margin for periapsis
-  });
-
-  // -----------------------------
   // Dynamics + measurement models
   // -----------------------------
   function orbitDeriv(x, u, mu) {
-    // x = [X, Xdot, Y, Ydot]
+    // x = [X, Xdot, Y, Ydot] in km, km/s
+    // u = [ax, ay] in km/s^2
     const X = x[0], Xd = x[1], Y = x[2], Yd = x[3];
     const r2 = X*X + Y*Y;
     const r = Math.sqrt(r2);
@@ -253,6 +249,7 @@
     for (let i = 0; i < 4; i++) x4[i] = x[i] + dt * k3[i];
 
     const k4 = orbitDeriv(x4, u, mu);
+
     const out = new Float64Array(4);
     for (let i = 0; i < 4; i++) out[i] = x[i] + (dt / 6) * (k1[i] + 2*k2[i] + 2*k3[i] + k4[i]);
     return out;
@@ -277,7 +274,7 @@
   }
 
   function stationState(i, t, Re, omega) {
-    // 12 stations equally spaced in longitude
+    // 12 stations equally spaced around Earth in inertial frame
     const theta0 = i * Math.PI / 6;
     const th = omega * t + theta0;
     const c = Math.cos(th), s = Math.sin(th);
@@ -297,7 +294,7 @@
       const dx = X - s.X;
       const dy = Y - s.Y;
       const dot = dx * s.X + dy * s.Y;
-      if (dot > 0) vis.push(i+1); // 1..12
+      if (dot > 0) vis.push(i+1); // station ids 1..12
     }
     return vis;
   }
@@ -316,7 +313,7 @@
     const rhod = (dX*dXd + dY*dYd) / rho;
     const phi = Math.atan2(dY, dX);
 
-    return { rho, rhod, phi, dX, dY, dXd, dYd };
+    return { rho, rhod, phi, dX, dY, dXd, dYd, st: s };
   }
 
   function H_jacobian_forStations(x, t, stationIds, Re, omega) {
@@ -336,33 +333,27 @@
       yhat[3*k + 1] = m.rhod;
       yhat[3*k + 2] = m.phi;
 
-      // Range
       H[3*k + 0][0] = m.dX / rho;
       H[3*k + 0][2] = m.dY / rho;
 
-      // Range-rate
       H[3*k + 1][0] = (m.dXd / rho) - (a * m.dX / rho3);
       H[3*k + 1][2] = (m.dYd / rho) - (a * m.dY / rho3);
       H[3*k + 1][1] = m.dX / rho;
       H[3*k + 1][3] = m.dY / rho;
 
-      // Bearing
       const rho2 = rho*rho;
       H[3*k + 2][0] = -m.dY / rho2;
       H[3*k + 2][2] =  m.dX / rho2;
     }
-
     return { yhat, H };
   }
 
-  // Process noise mapping: accel noise -> state
-  // L = [[dt^2/2,0],[dt,0],[0,dt^2/2],[0,dt]]
+  // Discrete-time mapping for accel noise -> state noise
   function QdFromQacc(Qacc2x2, dt) {
     const h = 0.5 * dt * dt;
     const L = zeros(4,2);
     L[0][0] = h;   L[1][0] = dt;
     L[2][1] = h;   L[3][1] = dt;
-
     const LQ = matMul(L, Qacc2x2);
     const Qd = matMul(LQ, matTrans(L));
     return symmetrize(Qd);
@@ -376,10 +367,8 @@
       this.mu = mu;
       this.Re = Re;
       this.omega = omega;
-
       this.x = new Float64Array(4);
       this.P = eye(4);
-
       this.Qacc = eye(2);
       this.Rstn = eye(3);
 
@@ -417,7 +406,7 @@
       let Pminus = matAdd(matMul(matMul(F, this.P), matTrans(F)), Qd);
       Pminus = symmetrize(Pminus);
 
-      if (!yMeas || yMeas.length === 0 || stationIds.length === 0) {
+      if (!yMeas || yMeas.length === 0 || !stationIds || stationIds.length === 0) {
         this.x = xminus;
         this.P = Pminus;
         this.lastInnov = null;
@@ -431,6 +420,7 @@
 
       const n = stationIds.length;
       const m = 3*n;
+
       const R = zeros(m, m);
       for (let k = 0; k < n; k++) {
         for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
@@ -443,10 +433,11 @@
       for (let k = 0; k < n; k++) e[3*k + 2] = wrapToPi(e[3*k + 2]);
 
       const HP = matMul(H, Pminus);
-      const S = symmetrize(matAdd(matMul(HP, matTrans(H)), R));
+      const S = matAdd(matMul(HP, matTrans(H)), R);
+      const Ssym = symmetrize(S);
 
       const PHt = matMul(Pminus, matTrans(H));
-      const Sinv = matInv(S);
+      const Sinv = matInv(Ssym);
       const K = matMul(PHt, Sinv);
 
       const Ke = matMulVec(K, e);
@@ -460,9 +451,8 @@
 
       this.x = xplus;
       this.P = Pplus;
-
       this.lastInnov = e;
-      this.lastS = S;
+      this.lastS = Ssym;
       this.lastYhat = yhat;
       this.lastStationIds = stationIds.slice();
     }
@@ -502,7 +492,7 @@
   }
 
   // -----------------------------
-  // Canvas utilities
+  // HiDPI canvas setup
   // -----------------------------
   function setupCanvasHiDPI(canvas) {
     if (!canvas) return null;
@@ -519,85 +509,105 @@
     return ctx;
   }
 
+  // -----------------------------
+  // Plot primitives (clip-safe)
+  // -----------------------------
   function clearPanel(ctx, w, h) {
     ctx.clearRect(0, 0, w, h);
-    const g = ctx.createRadialGradient(w*0.5, h*0.4, 10, w*0.5, h*0.5, Math.max(w,h)*0.8);
-    g.addColorStop(0, "rgba(58,166,255,0.06)");
-    g.addColorStop(1, "rgba(0,0,0,0.0)");
+    const g = ctx.createRadialGradient(w*0.35, h*0.25, 8, w*0.5, h*0.5, Math.max(w,h)*0.85);
+    g.addColorStop(0, "rgba(59,130,246,0.10)");  // blue
+    g.addColorStop(1, "rgba(249,115,22,0.06)");  // orange
     ctx.fillStyle = g;
     ctx.fillRect(0,0,w,h);
   }
 
-  // Axes w/ ticks (linear)
-  function drawAxesWithTicks(ctx, x, y, w, h, opts) {
+  function drawAxes(ctx, x, y, w, h, opts) {
     const {
+      grid = true,
       title = "",
       xLabel = "",
       yLabel = "",
-      xMin = 0,
-      xMax = 1,
-      yMin = 0,
-      yMax = 1,
-      xTicks = 5,
-      yTicks = 4,
+      xTicks = null, // {min,max,unit,fmt}
+      yTicks = null
     } = opts || {};
 
     ctx.save();
-    ctx.translate(x, y);
+    ctx.translate(x,y);
 
     // frame
-    ctx.strokeStyle = "rgba(110,231,255,0.12)";
+    ctx.strokeStyle = "rgba(226,232,240,1)"; // slate-200
     ctx.lineWidth = 1;
-    ctx.strokeRect(0, 0, w, h);
+    ctx.strokeRect(0,0,w,h);
 
-    // grid + ticks
-    ctx.font = `600 11px ${getComputedStyle(document.documentElement).getPropertyValue("--mono") || "ui-monospace, Menlo, Consolas, monospace"}`;
-    ctx.fillStyle = "rgba(127,138,161,0.92)";
-    ctx.strokeStyle = "rgba(110,231,255,0.06)";
-    ctx.lineWidth = 1;
-
-    for (let i = 0; i <= xTicks; i++) {
-      const u = i / xTicks;
-      const gx = u * w;
-      ctx.beginPath();
-      ctx.moveTo(gx, 0);
-      ctx.lineTo(gx, h);
-      ctx.stroke();
-
-      const val = xMin + u * (xMax - xMin);
-      const s = fmt(val, Math.abs(xMax - xMin) < 10 ? 2 : 0);
-      ctx.fillText(s, gx + 2, h - 6);
-    }
-    for (let j = 0; j <= yTicks; j++) {
-      const u = j / yTicks;
-      const gy = h - u * h;
-      ctx.beginPath();
-      ctx.moveTo(0, gy);
-      ctx.lineTo(w, gy);
-      ctx.stroke();
-
-      const val = yMin + u * (yMax - yMin);
-      const s = fmt(val, Math.abs(yMax - yMin) < 10 ? 2 : 0);
-      ctx.fillText(s, 6, gy - 2);
-    }
-
-    // titles/labels
-    ctx.fillStyle = "rgba(223,244,255,0.9)";
-    ctx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    // title
+    ctx.fillStyle = "rgba(15,23,42,0.95)"; // slate-900
+    ctx.font = "900 12px ui-monospace, Menlo, Consolas, monospace";
     ctx.fillText(title, 10, 16);
 
-    ctx.fillStyle = "rgba(127,138,161,0.92)";
-    ctx.font = "700 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    // labels
+    ctx.fillStyle = "rgba(71,85,105,0.95)"; // slate-600
+    ctx.font = "800 11px ui-monospace, Menlo, Consolas, monospace";
     if (xLabel) ctx.fillText(xLabel, w - ctx.measureText(xLabel).width - 10, h - 8);
+
     if (yLabel) {
       ctx.save();
-      ctx.translate(10, h/2);
+      ctx.translate(12, h/2);
       ctx.rotate(-Math.PI/2);
       ctx.fillText(yLabel, 0, 0);
       ctx.restore();
     }
 
+    // grid + ticks
+    const plotX0 = 46;
+    const plotY0 = 26;
+    const plotW = Math.max(2, w - plotX0 - 10);
+    const plotH = Math.max(2, h - plotY0 - 22);
+
+    if (grid) {
+      ctx.strokeStyle = "rgba(226,232,240,0.85)";
+      ctx.lineWidth = 1;
+      const nx = 6, ny = 4;
+
+      for (let i = 0; i <= nx; i++) {
+        const gx = plotX0 + (i/nx)*plotW;
+        ctx.beginPath();
+        ctx.moveTo(gx, plotY0);
+        ctx.lineTo(gx, plotY0 + plotH);
+        ctx.stroke();
+      }
+      for (let j = 0; j <= ny; j++) {
+        const gy = plotY0 + (j/ny)*plotH;
+        ctx.beginPath();
+        ctx.moveTo(plotX0, gy);
+        ctx.lineTo(plotX0 + plotW, gy);
+        ctx.stroke();
+      }
+
+      // ticks text
+      ctx.fillStyle = "rgba(100,116,139,0.95)"; // slate-500
+      ctx.font = "800 10px ui-monospace, Menlo, Consolas, monospace";
+
+      if (xTicks && Number.isFinite(xTicks.min) && Number.isFinite(xTicks.max) && xTicks.max > xTicks.min) {
+        for (let i = 0; i <= nx; i++) {
+          const v = xTicks.min + (i/nx)*(xTicks.max - xTicks.min);
+          const s = (xTicks.fmt ? xTicks.fmt(v) : fmt(v, 0)) + (xTicks.unit ? ` ${xTicks.unit}` : "");
+          const gx = plotX0 + (i/nx)*plotW;
+          ctx.fillText(s, gx - ctx.measureText(s).width/2, plotY0 + plotH + 14);
+        }
+      }
+
+      if (yTicks && Number.isFinite(yTicks.min) && Number.isFinite(yTicks.max) && yTicks.max > yTicks.min) {
+        for (let j = 0; j <= ny; j++) {
+          const v = yTicks.max - (j/ny)*(yTicks.max - yTicks.min);
+          const s = (yTicks.fmt ? yTicks.fmt(v) : fmt(v, 2)) + (yTicks.unit ? ` ${yTicks.unit}` : "");
+          const gy = plotY0 + (j/ny)*plotH;
+          ctx.fillText(s, 6, gy + 3);
+        }
+      }
+    }
+
     ctx.restore();
+    return { plotX0: x + plotX0, plotY0: y + plotY0, plotW, plotH };
   }
 
   function computeMinMax(seriesList) {
@@ -617,41 +627,52 @@
     return { mn: mn - pad, mx: mx + pad };
   }
 
-  function plotLine(ctx, x0, y0, w, h, t, y, tMin, tMax, yMin, yMax, style) {
+  function plotLine(ctx, box, t, y, tMin, tMax, yMin, yMax, style) {
     if (!t || !y || t.length < 2) return;
     const n = Math.min(t.length, y.length);
-    const denomT = (tMax - tMin) || 1;
-    const denomY = (yMax - yMin) || 1;
-    const sx = (tt) => x0 + (tt - tMin) / denomT * w;
-    const sy = (vv) => y0 + h - (vv - yMin) / denomY * h;
+    const sx = (tt) => box.x + (tt - tMin) / (tMax - tMin) * box.w;
+    const sy = (vv) => box.y + box.h - (vv - yMin) / (yMax - yMin) * box.h;
 
     ctx.save();
-    ctx.strokeStyle = style.stroke || "rgba(231,238,252,0.95)";
+    ctx.beginPath();
+    ctx.rect(box.x, box.y, box.w, box.h);
+    ctx.clip();
+
+    ctx.strokeStyle = style.stroke || "rgba(37,99,235,0.9)"; // blue-600
     ctx.lineWidth = style.width || 1.5;
     if (style.dash) ctx.setLineDash(style.dash);
-    ctx.beginPath();
-    ctx.moveTo(sx(t[0]), sy(y[0]));
-    for (let i = 1; i < n; i++) ctx.lineTo(sx(t[i]), sy(y[i]));
-    ctx.stroke();
+
+    let started = false;
+    for (let i = 0; i < n; i++) {
+      const tt = t[i], vv = y[i];
+      if (!Number.isFinite(tt) || !Number.isFinite(vv)) continue;
+      const px = sx(tt), py = sy(vv);
+      if (!started) { ctx.beginPath(); ctx.moveTo(px, py); started = true; }
+      else ctx.lineTo(px, py);
+    }
+    if (started) ctx.stroke();
     ctx.restore();
   }
 
-  function plotScatter(ctx, x0, y0, w, h, t, y, tMin, tMax, yMin, yMax, style) {
+  function plotScatter(ctx, box, t, y, tMin, tMax, yMin, yMax, style, colors = null) {
     if (!t || !y || t.length < 1) return;
     const n = Math.min(t.length, y.length);
-    const denomT = (tMax - tMin) || 1;
-    const denomY = (yMax - yMin) || 1;
-    const sx = (tt) => x0 + (tt - tMin) / denomT * w;
-    const sy = (vv) => y0 + h - (vv - yMin) / denomY * h;
+    const sx = (tt) => box.x + (tt - tMin) / (tMax - tMin) * box.w;
+    const sy = (vv) => box.y + box.h - (vv - yMin) / (yMax - yMin) * box.h;
 
     const r = style.r || 2.2;
+
     ctx.save();
-    ctx.fillStyle = style.fill || "rgba(58,166,255,0.95)";
+    ctx.beginPath();
+    ctx.rect(box.x, box.y, box.w, box.h);
+    ctx.clip();
+
     for (let i = 0; i < n; i++) {
-      const tt = t[i];
-      if (tt < tMin || tt > tMax) continue;
-      const px = sx(tt);
-      const py = sy(y[i]);
+      const tt = t[i], vv = y[i];
+      if (!Number.isFinite(tt) || !Number.isFinite(vv)) continue;
+      const px = sx(tt), py = sy(vv);
+
+      ctx.fillStyle = (colors && colors[i]) ? colors[i] : (style.fill || "rgba(249,115,22,0.85)");
       ctx.beginPath();
       ctx.arc(px, py, r, 0, 2*Math.PI);
       ctx.fill();
@@ -660,7 +681,7 @@
   }
 
   // -----------------------------
-  // Orbit view camera
+  // Orbit camera + interactions
   // -----------------------------
   class Camera {
     constructor() {
@@ -686,38 +707,16 @@
   }
 
   // -----------------------------
-  // Plot view (time window pan/zoom when paused)
+  // Station colors (12 distinct)
   // -----------------------------
-  class TimeView {
-    constructor() {
-      this.windowSec = 1200; // default visible window
-      this.center = 0;       // center time (sec), used when paused
-      this.locked = false;   // becomes true after user interacts while paused
-    }
-    follow(tNow) {
-      if (this.locked) return;
-      this.center = tNow;
-    }
-    resetFollow() {
-      this.locked = false;
-    }
-    getRange(tNow) {
-      const c = this.locked ? this.center : tNow;
-      const half = 0.5 * this.windowSec;
-      return { tMin: Math.max(0, c - half), tMax: Math.max(1, c + half) };
-    }
-    zoom(factor) {
-      const w = this.windowSec;
-      this.windowSec = clamp(w / factor, 120, 7200);
-    }
-    pan(dt) {
-      this.center = Math.max(0, this.center + dt);
-    }
-    userTouched() { this.locked = true; }
-  }
+  const ST_COLORS = [
+    "#2563eb", "#ea580c", "#16a34a", "#dc2626",
+    "#7c3aed", "#0891b2", "#d97706", "#0f766e",
+    "#be123c", "#1d4ed8", "#65a30d", "#b45309"
+  ];
 
   // -----------------------------
-  // UI handles (nullable)
+  // App DOM handles (safe)
   // -----------------------------
   const el = {
     statusRun: $("#statusRun"),
@@ -733,6 +732,7 @@
     roErrNorm: $("#roErrNorm"),
 
     stationBoard: $("#stationBoard"),
+    stationBoardSmall: $("#stationBoardSmall"), // optional (meas sidebar)
 
     btnToggleRun: $("#btnToggleRun"),
     btnStep: $("#btnStep"),
@@ -740,28 +740,20 @@
     btnApplyIC: $("#btnApplyIC"),
     btnResetFilter: $("#btnResetFilter"),
 
-    // Inputs (many may be absent after HTML simplification)
+    inpDt: $("#inpDt"),
     inpSteps: $("#inpSteps"),
 
-    // Orbital elements (expected)
-    inpRpAlt: $("#inpRpAlt"),       // km
-    inpEcc: $("#inpEcc"),           // unitless [0,1)
-    inpNuDeg: $("#inpNuDeg"),       // deg
-    inpArgPerDeg: $("#inpArgPerDeg"), // deg (optional)
-    inpM0Deg: $("#inpM0Deg"),       // deg (optional, if you choose mean anomaly)
-    inpThrustMag: $("#inpThrustMag"), // km/s^2 (or m/s^2 converted)
-    inpThrustMagMS2: $("#inpThrustMagMS2"), // m/s^2 (optional)
-
-    // Noise toggles & scalars
     tglProcNoise: $("#tglProcNoise"),
     tglMeasNoise: $("#tglMeasNoise"),
 
+    // Truth noise
     inpQtrueAx: $("#inpQtrueAx"),
     inpQtrueAy: $("#inpQtrueAy"),
     inpRtrueRho: $("#inpRtrueRho"),
     inpRtrueRhod: $("#inpRtrueRhod"),
     inpRtruePhi: $("#inpRtruePhi"),
 
+    // Filter assumptions
     inpSigX0: $("#inpSigX0"),
     inpSigV0: $("#inpSigV0"),
     inpQkfAx: $("#inpQkfAx"),
@@ -771,38 +763,38 @@
     inpRkfPhi: $("#inpRkfPhi"),
     inpAlpha: $("#inpAlpha"),
 
-    // Thrust buttons (expected)
-    thrUp: $("#thrUp"),
-    thrDown: $("#thrDown"),
-    thrLeft: $("#thrLeft"),
-    thrRight: $("#thrRight"),
-    thrZero: $("#thrZero"),
+    // Thrust controls (optional; ids may vary)
+    inpThrust: $("#inpThrust"),
+    btnThUp: $("#btnThUp"),
+    btnThDown: $("#btnThDown"),
+    btnThLeft: $("#btnThLeft"),
+    btnThRight: $("#btnThRight"),
+    btnThZero: $("#btnThZero"),
+
+    // Speed chips
+    spdChips: $$(".chip[data-speed]"),
 
     // Orbit view
     orbitCanvas: $("#orbitCanvas"),
     btnCenterView: $("#btnCenterView"),
     btnResetView: $("#btnResetView"),
-    btnZoomToSat: $("#btnZoomToSat"),
+    btnZoomCraft: $("#btnZoomCraft"),
 
     // Plots
     plotStates: $("#plotStates"),
     plotErrors: $("#plotErrors"),
     plotMeas: $("#plotMeas"),
+    plotTraj: $("#plotTraj"),
     plotCons: $("#plotCons"),
-  };
 
-  // -----------------------------
-  // Station colors (should match CSS intent)
-  // -----------------------------
-  const STATION_COLORS = [
-    "#6ee7ff", "#78f3b6", "#ffcc66", "#ff5c7a",
-    "#a78bfa", "#22d3ee", "#fb7185", "#34d399",
-    "#fbbf24", "#60a5fa", "#f472b6", "#a3e635"
-  ];
-  function stationColor(id) {
-    const i = (id - 1) % STATION_COLORS.length;
-    return STATION_COLORS[i];
-  }
+    // Tabs
+    tabs: $$(".tab"),
+    paneStates: $("#pane-states"),
+    paneErrors: $("#pane-errors"),
+    paneMeas: $("#pane-meas"),
+    paneTraj: $("#pane-traj"),
+    paneCons: $("#pane-cons"),
+  };
 
   // -----------------------------
   // App state
@@ -810,87 +802,96 @@
   const app = {
     running: false,
     speed: 10,
-    dt: CONST.dt,
+    dt: 10,
     Kmax: 1_000_000,
 
-    mu: CONST.mu,
-    Re: CONST.Re,
-    omega: CONST.omega,
+    // Earth constants (fixed)
+    mu: 398600,             // km^3/s^2
+    Re: 6378,               // km
+    omega: 2*Math.PI/86400, // rad/s
 
-    // user command acceleration (km/s^2)
-    uCmd: new Float64Array([0, 0]),
-    uHold: { up:false, down:false, left:false, right:false },
-    thrustMag: 0.0, // km/s^2
-
-    // time/step
     t: 0,
     k: 0,
-
     truth: new Float64Array(4),
-    ekf: new EKF(CONST.mu, CONST.Re, CONST.omega),
+    ekf: new EKF(398600, 6378, 2*Math.PI/86400),
 
     enableProcNoise: true,
     enableMeasNoise: true,
 
-    // Defaults intentionally “noisier” to match typical classroom/testing demos
-    QtrueAcc: (() => { const Q = zeros(2,2); Q[0][0]=1e-8; Q[1][1]=1e-8; return Q; })(),
-    RtrueStn: (() => { const R = zeros(3,3); R[0][0]=5*5; R[1][1]=0.01*0.01; R[2][2]=0.01*0.01; return R; })(),
+    QtrueAcc: eye(2),
+    RtrueStn: eye(3),
 
+    // control acceleration (km/s^2)
+    u: new Float64Array([0,0]),
+    thrustMag: 0.00002, // default tiny accel
+
+    // history buffers
     bufMax: 2400,
     tHist: [],
     xTrueHist: [[],[],[],[]],
-    xHatHist:  [[],[],[],[]],
-    sigHist:   [[],[],[],[]],
-    errHist:   [[],[],[],[]],
+    xHatHist: [[],[],[],[]],
+    sigHist: [[],[],[],[]],
+    errHist: [[],[],[],[]],
     neesHist: [],
     nisHist: [],
     nisDfHist: [],
 
-    // Measurements organized by station for coloring
-    measByStation: Array.from({length:12}, () => ({ t:[], rho:[], rhod:[], phi:[] })),
-    predByStation: Array.from({length:12}, () => ({ t:[], rho:[], rhod:[], phi:[] })),
+    // measurement series (store station ids for coloring)
+    measT: [],
+    measRho: [],
+    measRhod: [],
+    measPhi: [],
+    measStId: [],
 
-    pulses: [], // {t0,dur,sx,sy,tx,ty,id,color}
+    predT: [],
+    predRho: [],
+    predRhod: [],
+    predPhi: [],
+    predStId: [],
 
+    // signal visuals
+    pulses: [],     // line + dot
+    squiggles: [],  // animated squiggle along link
+
+    // render handles
     cam: new Camera(),
     orbitCtx: null,
-
     ctxStates: null,
     ctxErrors: null,
     ctxMeas: null,
+    ctxTraj: null,
     ctxCons: null,
 
+    // plotting
     plotDirty: true,
     lastPlotDraw: 0,
 
-    // view controllers
-    viewMeas: new TimeView(),
-    viewCons: new TimeView(),
-    viewStates: new TimeView(),
-    viewErrors: new TimeView(),
-
-    // RNG
+    // RNG (random each load)
     rng: null,
     randn: null,
 
-    // Safety latch
-    lastSafeState: null, // {t,k,truth,ekfX,ekfP}
+    // thrust input state
+    thrustKeys: { up:false, down:false, left:false, right:false },
+    thrustButtonsHeld: { up:false, down:false, left:false, right:false },
+
+    // crash flag
+    crashed: false,
   };
 
   // -----------------------------
   // Station board UI
   // -----------------------------
   function makeDishSVG() {
-    // Dish facing up (no upside-down look). Kept minimal and crisp.
+    // Dish is oriented "up" (bowl opening upward). The earlier inverted version looked upside down.
     return `
       <svg viewBox="0 0 120 34" aria-hidden="true" focusable="false">
-        <path class="dishfill" d="M 12 26 Q 60 6 108 26 Q 60 30 12 26 Z"></path>
-        <path class="dishline" d="M 12 26 Q 60 6 108 26"></path>
-        <path class="dishline" d="M 58 26 L 52 10"></path>
-        <path class="dishline" d="M 60 26 L 60 9"></path>
-        <path class="dishline" d="M 62 26 L 68 10"></path>
-        <path class="dishline" d="M 54 26 L 54 32"></path>
-        <path class="dishline" d="M 66 26 L 66 32"></path>
+        <path class="dishfill" d="M 12 18 Q 60 2 108 18 Q 60 26 12 18 Z"></path>
+        <path class="dishline" d="M 12 18 Q 60 2 108 18"></path>
+        <path class="dishline" d="M 58 18 L 50 7"></path>
+        <path class="dishline" d="M 60 18 L 60 6"></path>
+        <path class="dishline" d="M 62 18 L 70 7"></path>
+        <path class="dishline" d="M 54 18 L 54 31"></path>
+        <path class="dishline" d="M 66 18 L 66 31"></path>
       </svg>
     `;
   }
@@ -901,58 +902,49 @@
       </svg>
     `;
   }
-  function makeSquiggleSVG() {
-    return `
-      <svg viewBox="0 0 120 18" aria-hidden="true" focusable="false">
-        <path class="squigglepath"
-              d="M2 10 C 10 2, 18 16, 26 10
-                 S 42 2, 50 10
-                 S 66 16, 74 10
-                 S 90 2, 98 10
-                 S 110 16, 118 10"></path>
-      </svg>
-    `;
-  }
 
-  function buildStationBoard() {
-    if (!el.stationBoard) return;
-    el.stationBoard.innerHTML = "";
+  function buildStationBoard(container) {
+    if (!container) return;
+    container.innerHTML = "";
     for (let i = 1; i <= 12; i++) {
       const tile = document.createElement("div");
       tile.className = "stationtile";
-      tile.id = `st-${i}`;
-      tile.dataset.station = String(i);
-      tile.style.setProperty("--stc", stationColor(i));
+      tile.id = `${container.id}-st-${i}`;
       tile.innerHTML = `
         <div class="stationhead">
           <div class="stationname">STATION ${String(i).padStart(2,"0")}</div>
-          <div class="stationmeta" id="stmeta-${i}">—</div>
+          <div class="stationmeta" id="${container.id}-meta-${i}">—</div>
         </div>
         <div class="dishicon">${makeDishSVG()}</div>
-        <div class="datasquiggle">${makeSquiggleSVG()}</div>
         <div class="lightning">${makeLightningSVG()}</div>
       `;
-      el.stationBoard.appendChild(tile);
+      // station accent (for border glow etc.)
+      tile.style.setProperty("--st-accent", ST_COLORS[i-1]);
+      container.appendChild(tile);
     }
   }
 
-  function updateStationBoard(visibleIds, pulsingIds) {
-    if (!el.stationBoard) return;
+  function updateStationBoard(container, visibleIds, pulsingIds) {
+    if (!container) return;
     const visSet = new Set(visibleIds);
     const pulseSet = new Set(pulsingIds);
-
     for (let i = 1; i <= 12; i++) {
-      const tile = $(`#st-${i}`);
+      const tile = $(`#${container.id}-st-${i}`);
       if (!tile) continue;
-      tile.classList.toggle("is-visible", visSet.has(i));
-      tile.classList.toggle("is-pulsing", pulseSet.has(i));
-      const meta = $(`#stmeta-${i}`);
-      if (meta) meta.textContent = visSet.has(i) ? `VISIBLE` : `—`;
+      const meta = $(`#${container.id}-meta-${i}`);
+      const vis = visSet.has(i);
+      const pul = pulseSet.has(i);
+      tile.classList.toggle("is-visible", vis);
+      tile.classList.toggle("is-pulsing", pul);
+      if (meta) meta.textContent = vis ? "VISIBLE" : "—";
+      // tint lightning per station
+      const lightning = tile.querySelector(".lightning svg");
+      if (lightning) lightning.style.fill = ST_COLORS[i-1];
     }
   }
 
   // -----------------------------
-  // Matrix builders from UI (with sensible fallbacks)
+  // Matrices from UI
   // -----------------------------
   function buildP0(sigX, sigV) {
     const P0 = zeros(4,4);
@@ -977,90 +969,33 @@
   }
 
   // -----------------------------
-  // Orbital elements -> Cartesian (2D)
-  // Inputs:
-  //   rpAlt (km), e [0,1), nuDeg, argPerDeg (optional)
-  // Safety: clamp periapsis to > Re + minAlt.
-  // -----------------------------
-  function elementsToState2D(rpAltKm, e, nuDeg, argPerDeg) {
-    const rp = CONST.Re + Math.max(CONST.minAlt, rpAltKm);
-    const ecc = clamp(e, 0, 0.999);
-    const nu = (nuDeg * Math.PI) / 180;
-    const arg = (argPerDeg || 0) * Math.PI / 180;
-
-    // a = rp/(1-e)
-    const a = rp / (1 - ecc);
-    const p = a * (1 - ecc*ecc);
-
-    // position/velocity in perifocal frame
-    const r = p / (1 + ecc * Math.cos(nu));
-    const xP = r * Math.cos(nu);
-    const yP = r * Math.sin(nu);
-
-    const vScale = Math.sqrt(CONST.mu / p);
-    const vxP = -vScale * Math.sin(nu);
-    const vyP =  vScale * (ecc + Math.cos(nu));
-
-    // rotate by argument of periapsis
-    const c = Math.cos(arg), s = Math.sin(arg);
-    const x = c*xP - s*yP;
-    const y = s*xP + c*yP;
-    const vx = c*vxP - s*vyP;
-    const vy = s*vxP + c*vyP;
-
-    return new Float64Array([x, vx, y, vy]);
-  }
-
-  function statePeriapsisRadius(x) {
-    // For a general state, estimate rp from energy & angular momentum (ellipse assumed)
-    const X=x[0], Y=x[2], Vx=x[1], Vy=x[3];
-    const r = Math.hypot(X,Y);
-    const v2 = Vx*Vx + Vy*Vy;
-    const h = X*Vy - Y*Vx; // scalar
-    const eps = v2/2 - CONST.mu / (r + 1e-18);
-    if (eps >= 0) return NaN; // not bound
-    const a = -CONST.mu / (2*eps);
-    const e = Math.sqrt(Math.max(0, 1 - (h*h)/(CONST.mu*a)));
-    const rp = a*(1 - e);
-    return rp;
-  }
-
-  // -----------------------------
   // Running / speed
   // -----------------------------
   function setRunning(run) {
-    app.running = run;
+    app.running = !!run && !app.crashed;
+    safeText(el.statusRun, app.running ? "RUNNING" : "PAUSED");
+    if (el.btnToggleRun) el.btnToggleRun.textContent = app.running ? "Pause" : "Run";
     if (el.statusRun) {
-      el.statusRun.textContent = run ? "RUNNING" : "PAUSED";
-      el.statusRun.style.borderColor = run ? "rgba(120,243,182,.35)" : "rgba(110,231,255,.22)";
-    }
-    if (el.btnToggleRun) el.btnToggleRun.textContent = run ? "Pause" : "Run";
-
-    // When resuming, return plots to follow mode
-    if (run) {
-      app.viewMeas.resetFollow();
-      app.viewCons.resetFollow();
-      app.viewStates.resetFollow();
-      app.viewErrors.resetFollow();
+      el.statusRun.classList.toggle("pill--warn", app.crashed);
+      el.statusRun.classList.toggle("pill--idle", !app.crashed);
     }
   }
 
   function setSpeed(s) {
     app.speed = s;
-    for (const id of ["spd1","spd10","spd100","spd1000"]) {
-      const b = $(`#${id}`);
-      if (!b) continue;
-      b.classList.toggle("is-active", parseFloat(b.dataset.speed) === s);
-    }
+    (el.spdChips || []).forEach(btn => {
+      btn.classList.toggle("is-active", parseFloat(btn.dataset.speed) === s);
+    });
   }
 
   // -----------------------------
-  // History buffers
+  // Buffer helpers
   // -----------------------------
-  function pushLimited(arr, val, maxN = app.bufMax) {
+  function pushLimited(arr, val, max = app.bufMax) {
     arr.push(val);
-    if (arr.length > maxN) arr.shift();
+    if (arr.length > max) arr.shift();
   }
+
   function pushHistorySample() {
     const t = app.t;
     const xt = app.truth;
@@ -1074,17 +1009,15 @@
       pushLimited(app.sigHist[i], s);
       pushLimited(app.errHist[i], xh[i] - xt[i]);
     }
-    const nees = app.ekf.computeNEES(xt);
-    const nis = app.ekf.computeNIS();
-    pushLimited(app.neesHist, nees);
-    pushLimited(app.nisHist, nis);
+    pushLimited(app.neesHist, app.ekf.computeNEES(xt));
+    pushLimited(app.nisHist, app.ekf.computeNIS());
     pushLimited(app.nisDfHist, app.ekf.lastInnov ? app.ekf.lastInnov.length : NaN);
 
     app.plotDirty = true;
   }
 
   // -----------------------------
-  // MVN sampling (small symmetric PSD)
+  // Noise sampling
   // -----------------------------
   function sampleMVN(dim, cov, randn) {
     const n = dim;
@@ -1113,43 +1046,69 @@
   }
 
   // -----------------------------
-  // Readouts
+  // Readouts (continuous time)
   // -----------------------------
-  function updateReadouts(visibleIds) {
-    if (el.readoutTime) el.readoutTime.textContent = `${fmt(app.t, 1)} s`;
-    if (el.readoutStep) el.readoutStep.textContent = `${app.k}`;
-    if (el.readoutVisible) el.readoutVisible.textContent = `${visibleIds.length}`;
+  function updateReadouts(visibleIds, tDisplay) {
+    const tShown = Number.isFinite(tDisplay) ? tDisplay : app.t;
 
-    // Display the most recent measurement (any station)
-    let latest = null;
-    for (let sid = 1; sid <= 12; sid++) {
-      const m = app.measByStation[sid-1];
-      if (m.t.length === 0) continue;
-      const i = m.t.length - 1;
-      if (!latest || m.t[i] > latest.t) {
-        latest = { t: m.t[i], rho: m.rho[i], rhod: m.rhod[i], phi: m.phi[i] };
-      }
-    }
+    safeText(el.readoutTime, `${fmt(tShown, 1)} s`);
+    safeText(el.readoutStep, `${app.k}`);
+    safeText(el.readoutVisible, `${visibleIds.length}`);
 
-    if (latest) {
-      if (el.roRho) el.roRho.textContent = `${fmt(latest.rho, 3)} km`;
-      if (el.roRhod) el.roRhod.textContent = `${fmt(latest.rhod, 5)} km/s`;
-      if (el.roPhi) el.roPhi.textContent = `${fmt(latest.phi, 5)} rad`;
+    // show the most recent measurement (if any)
+    if (app.measT.length > 0) {
+      const i = app.measT.length - 1;
+      safeText(el.roRho,  `${fmt(app.measRho[i], 3)} km`);
+      safeText(el.roRhod, `${fmt(app.measRhod[i], 5)} km/s`);
+      safeText(el.roPhi,  `${fmt(app.measPhi[i], 5)} rad`);
     } else {
-      if (el.roRho) el.roRho.textContent = "—";
-      if (el.roRhod) el.roRhod.textContent = "—";
-      if (el.roPhi) el.roPhi.textContent = "—";
+      safeText(el.roRho, "—");
+      safeText(el.roRhod, "—");
+      safeText(el.roPhi, "—");
     }
 
-    if (el.roNEES) el.roNEES.textContent = Number.isFinite(app.ekf.lastNEES) ? fmt(app.ekf.lastNEES, 2) : "—";
-    if (el.roNIS) el.roNIS.textContent = Number.isFinite(app.ekf.lastNIS) ? fmt(app.ekf.lastNIS, 2) : "—";
+    safeText(el.roNEES, Number.isFinite(app.ekf.lastNEES) ? fmt(app.ekf.lastNEES, 2) : "—");
+    safeText(el.roNIS,  Number.isFinite(app.ekf.lastNIS)  ? fmt(app.ekf.lastNIS, 2)  : "—");
 
     const dx = app.ekf.x[0] - app.truth[0];
     const dy = app.ekf.x[2] - app.truth[2];
     const dvx = app.ekf.x[1] - app.truth[1];
     const dvy = app.ekf.x[3] - app.truth[3];
     const nrm = Math.sqrt(dx*dx + dy*dy + dvx*dvx + dvy*dvy);
-    if (el.roErrNorm) el.roErrNorm.textContent = fmt(nrm, 4);
+    safeText(el.roErrNorm, fmt(nrm, 4));
+  }
+
+  // -----------------------------
+  // Signal visuals (pulse + squiggle)
+  // -----------------------------
+  function spawnSignalVisuals(xTrue, tNow, stationIds) {
+    const now = performance.now();
+    for (const id of stationIds) {
+      const s = stationState(id - 1, tNow, app.Re, app.omega);
+      const color = ST_COLORS[id-1];
+
+      // dot-on-line pulse
+      app.pulses.push({
+        t0: now,
+        dur: 380,
+        sx: xTrue[0], sy: xTrue[2],
+        tx: s.X, ty: s.Y,
+        id, color
+      });
+
+      // squiggle line (data link)
+      app.squiggles.push({
+        t0: now,
+        dur: 600,
+        sx: xTrue[0], sy: xTrue[2],
+        tx: s.X, ty: s.Y,
+        id, color,
+        phase: Math.random() * 10
+      });
+    }
+    const cap = 260;
+    if (app.pulses.length > cap) app.pulses.splice(0, app.pulses.length - cap);
+    if (app.squiggles.length > cap) app.squiggles.splice(0, app.squiggles.length - cap);
   }
 
   // -----------------------------
@@ -1168,7 +1127,7 @@
     const angle = 0.5 * Math.atan2(2*Pxy, (Pxx - Pyy));
     const s1 = Math.sqrt(Math.max(0, l1));
     const s2 = Math.sqrt(Math.max(0, l2));
-    const k = 2;
+    const k = 2; // ~2σ
     const rx = (k*s1) / app.cam.kmPerPx;
     const ry = (k*s2) / app.cam.kmPerPx;
 
@@ -1177,54 +1136,41 @@
     ctx.save();
     ctx.translate(c.x, c.y);
     ctx.rotate(angle);
-    ctx.strokeStyle = "rgba(110,231,255,0.30)";
-    ctx.fillStyle = "rgba(110,231,255,0.08)";
+    ctx.strokeStyle = "rgba(37,99,235,0.35)";
+    ctx.fillStyle = "rgba(37,99,235,0.10)";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.ellipse(0, 0, Math.max(0, rx), Math.max(0, ry), 0, 0, 2*Math.PI);
+    ctx.ellipse(0, 0, Math.max(0.1, rx), Math.max(0.1, ry), 0, 0, 2*Math.PI);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
   }
 
-  function drawEstimatedOneOrbitPreview(ctx, W, H) {
-    // Propagate EKF state forward with zero thrust (preview only)
-    const x0 = app.ekf.x;
-    const X=x0[0], Y=x0[2], Vx=x0[1], Vy=x0[3];
-    const r = Math.hypot(X,Y);
-    const v2 = Vx*Vx + Vy*Vy;
-    const eps = v2/2 - CONST.mu / (r + 1e-18);
-    if (!(eps < 0)) return;
+  function drawSquiggle(ctx, x0, y0, x1, y1, amp, waves, phase) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const L = Math.hypot(dx, dy) + 1e-9;
+    const ux = dx / L, uy = dy / L;
+    const nx = -uy, ny = ux;
 
-    const a = -CONST.mu/(2*eps);
-    const T = 2*Math.PI*Math.sqrt((a*a*a)/CONST.mu);
-    const horizon = clamp(T, 900, 20000);
-
-    const nPts = 220;
-    const dt = horizon / nPts;
-
-    let x = new Float64Array(x0);
-    ctx.save();
-    ctx.strokeStyle = "rgba(110,231,255,0.35)";
-    ctx.lineWidth = 1.2;
-    ctx.setLineDash([6, 4]);
+    const steps = 42;
     ctx.beginPath();
-
-    for (let i = 0; i <= nPts; i++) {
-      const p = app.cam.worldToScreen(x[0], x[2], W, H);
-      if (i === 0) ctx.moveTo(p.x, p.y);
-      else ctx.lineTo(p.x, p.y);
-      x = rk4Step(x, new Float64Array([0,0]), dt, CONST.mu);
+    for (let i = 0; i <= steps; i++) {
+      const a = i / steps;
+      const px = x0 + a*dx;
+      const py = y0 + a*dy;
+      const w = Math.sin(phase + a * waves * 2*Math.PI);
+      const ox = amp * w * nx;
+      const oy = amp * w * ny;
+      if (i === 0) ctx.moveTo(px + ox, py + oy);
+      else ctx.lineTo(px + ox, py + oy);
     }
-
     ctx.stroke();
-    ctx.restore();
   }
 
   function drawOrbitView() {
     const canvas = el.orbitCanvas;
     const ctx = app.orbitCtx;
-    if (!ctx || !canvas) return;
+    if (!canvas || !ctx) return;
 
     const rect = canvas.getBoundingClientRect();
     const W = rect.width;
@@ -1234,14 +1180,14 @@
 
     // Earth
     const earth = app.cam.worldToScreen(0,0,W,H);
-    const RePx = app.Re / app.cam.kmPerPx;
+    const RePx = Math.max(0.1, app.Re / app.cam.kmPerPx);
     ctx.save();
     ctx.beginPath();
-    ctx.arc(earth.x, earth.y, Math.max(0, RePx), 0, 2*Math.PI);
-    ctx.fillStyle = "rgba(120,243,182,0.10)";
+    ctx.arc(earth.x, earth.y, RePx, 0, 2*Math.PI);
+    ctx.fillStyle = "rgba(249,115,22,0.08)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(120,243,182,0.22)";
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(249,115,22,0.22)";
+    ctx.lineWidth = 1.3;
     ctx.stroke();
     ctx.restore();
 
@@ -1251,18 +1197,18 @@
       const p = app.cam.worldToScreen(s.X, s.Y, W, H);
       ctx.save();
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 3.2, 0, 2*Math.PI);
-      ctx.fillStyle = stationColor(i);
-      ctx.globalAlpha = 0.90;
+      ctx.arc(p.x, p.y, 3.0, 0, 2*Math.PI);
+      ctx.fillStyle = ST_COLORS[i-1];
+      ctx.globalAlpha = 0.85;
       ctx.fill();
       ctx.restore();
     }
 
-    // Trajectories (truth + estimate)
+    // Trajectories: truth & estimate
     const n = app.tHist.length;
     if (n > 2) {
       ctx.save();
-      ctx.strokeStyle = "rgba(231,238,252,0.90)";
+      ctx.strokeStyle = "rgba(15,23,42,0.75)"; // truth: slate-900-ish
       ctx.lineWidth = 1.6;
       ctx.beginPath();
       for (let i = 0; i < n; i++) {
@@ -1276,8 +1222,9 @@
       ctx.restore();
 
       ctx.save();
-      ctx.strokeStyle = "rgba(110,231,255,0.90)";
+      ctx.strokeStyle = "rgba(37,99,235,0.85)"; // estimate: blue-600
       ctx.lineWidth = 1.6;
+      ctx.setLineDash([6,4]);
       ctx.beginPath();
       let started = false;
       for (let i = 0; i < n; i++) {
@@ -1288,45 +1235,67 @@
         if (!started) { ctx.moveTo(p.x, p.y); started = true; }
         else ctx.lineTo(p.x, p.y);
       }
-      ctx.stroke();
+      if (started) ctx.stroke();
       ctx.restore();
     }
 
-    // 1-orbit preview from EKF state (dashed)
-    drawEstimatedOneOrbitPreview(ctx, W, H);
-
-    // Current markers
+    // Markers: truth (white-ish) and estimate (blue)
     const satT = app.cam.worldToScreen(app.truth[0], app.truth[2], W, H);
     const satE = app.cam.worldToScreen(app.ekf.x[0], app.ekf.x[2], W, H);
 
+    // truth marker
     ctx.save();
     ctx.beginPath();
     ctx.arc(satT.x, satT.y, 4.8, 0, 2*Math.PI);
-    ctx.fillStyle = "rgba(231,238,252,0.95)";
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(231,238,252,0.35)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(satE.x, satE.y, 4.8, 0, 2*Math.PI);
-    ctx.fillStyle = "rgba(110,231,255,0.95)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(110,231,255,0.35)";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(15,23,42,0.35)";
+    ctx.lineWidth = 1.2;
     ctx.stroke();
     ctx.restore();
 
-    // Cov ellipse
+    // estimate marker
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(satE.x, satE.y, 4.6, 0, 2*Math.PI);
+    ctx.fillStyle = "rgba(37,99,235,0.90)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(37,99,235,0.30)";
+    ctx.lineWidth = 1.0;
+    ctx.stroke();
+    ctx.restore();
+
+    // Covariance ellipse around estimate
     drawCovEllipse(ctx, app.ekf.P, app.ekf.x, W, H);
 
-    // Signal pulses (measurement link visualization, colored per station)
+    // Signals: pulses + squiggles
     const now = performance.now();
-    const still = [];
+
+    // squiggles behind
+    const squigStill = [];
+    for (const s of app.squiggles) {
+      const age = now - s.t0;
+      if (age > s.dur) continue;
+      squigStill.push(s);
+      const a = age / s.dur;
+      const w0 = app.cam.worldToScreen(s.sx, s.sy, W, H);
+      const w1 = app.cam.worldToScreen(s.tx, s.ty, W, H);
+
+      ctx.save();
+      ctx.strokeStyle = s.color;
+      ctx.globalAlpha = 0.22 * (1 - 0.35*a);
+      ctx.lineWidth = 2.0;
+      drawSquiggle(ctx, w0.x, w0.y, w1.x, w1.y, 4.0, 6, s.phase + a*10);
+      ctx.restore();
+    }
+    app.squiggles = squigStill;
+
+    // pulses on top
+    const pulseStill = [];
     for (const p of app.pulses) {
       const age = now - p.t0;
       if (age > p.dur) continue;
-      still.push(p);
+      pulseStill.push(p);
 
       const a = age / p.dur;
       const s0 = app.cam.worldToScreen(p.sx, p.sy, W, H);
@@ -1335,62 +1304,53 @@
       const y = s0.y + a * (s1.y - s0.y);
 
       ctx.save();
-      ctx.strokeStyle = hexToRgba(p.color, 0.22 * (1-a) + 0.06);
-      ctx.lineWidth = 2.0;
+      ctx.strokeStyle = p.color;
+      ctx.globalAlpha = 0.18 * (1-a);
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(s0.x, s0.y);
       ctx.lineTo(s1.x, s1.y);
       ctx.stroke();
 
-      // squiggle-ish stroke overlay
-      ctx.strokeStyle = hexToRgba(p.color, 0.20 * (1-a) + 0.06);
-      ctx.setLineDash([6, 6]);
-      ctx.beginPath();
-      ctx.moveTo(s0.x, s0.y);
-      ctx.lineTo(s1.x, s1.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      ctx.fillStyle = hexToRgba(p.color, 0.85 * (1-a) + 0.15);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = 0.85 * (1-a) + 0.15;
       ctx.beginPath();
       ctx.arc(x, y, 3.2, 0, 2*Math.PI);
       ctx.fill();
       ctx.restore();
     }
-    app.pulses = still;
+    app.pulses = pulseStill;
 
     // HUD
     ctx.save();
-    ctx.fillStyle = "rgba(223,244,255,0.92)";
-    ctx.font = "800 12px ui-monospace, Menlo, Consolas, monospace";
+    ctx.fillStyle = "rgba(15,23,42,0.9)";
+    ctx.font = "900 12px ui-monospace, Menlo, Consolas, monospace";
     ctx.fillText(`t = ${fmt(app.t,1)} s`, 10, 18);
-    ctx.fillStyle = "rgba(127,138,161,0.95)";
-    ctx.font = "700 11px ui-monospace, Menlo, Consolas, monospace";
-    ctx.fillText(`km/px = ${fmt(app.cam.kmPerPx, 3)}`, 10, 34);
+    ctx.fillStyle = "rgba(71,85,105,0.95)";
+    ctx.font = "800 11px ui-monospace, Menlo, Consolas, monospace";
+    ctx.fillText(`zoom = ${fmt(app.cam.kmPerPx, 3)} km/px`, 10, 34);
     ctx.restore();
   }
 
-  function hexToRgba(hex, a) {
-    const h = hex.replace("#", "").trim();
-    const r = parseInt(h.slice(0,2), 16);
-    const g = parseInt(h.slice(2,4), 16);
-    const b = parseInt(h.slice(4,6), 16);
-    return `rgba(${r},${g},${b},${clamp(a,0,1)})`;
-  }
-
   // -----------------------------
-  // Plots
+  // Plot rendering
   // -----------------------------
   function drawPlotsIfNeeded() {
     const now = performance.now();
-    if (!app.plotDirty && (now - app.lastPlotDraw) < 220) return;
+    if (!app.plotDirty && (now - app.lastPlotDraw) < 200) return;
     app.lastPlotDraw = now;
     app.plotDirty = false;
 
     drawStatesPlot();
     drawErrorsPlot();
     drawMeasPlot();
+    drawTrajPlot();
     drawConsPlot();
+  }
+
+  function plotBoxesForTile(x, y, w, h) {
+    // Reserve left margin for y ticks and bottom for x ticks (inside drawAxes too)
+    return { x, y, w, h };
   }
 
   function drawStatesPlot() {
@@ -1402,61 +1362,45 @@
     const W = rect.width, H = rect.height;
     clearPanel(ctx, W, H);
 
-    // If mobile: let JS draw a single column layout (2 panels tall * 2) by using a narrow tileW
-    const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
-
     const pad = 12;
-    const cols = isMobile ? 1 : 2;
-    const rows = isMobile ? 4 : 2;
-    const tileW = (W - pad*(cols+1)) / cols;
-    const tileH = (H - pad*(rows+1)) / rows;
+    const tileW = (W - pad*3) / 2;
+    const tileH = (H - pad*3) / 2;
 
-    const labels = [
-      { title:"X position", yLabel:"X (km)" },
-      { title:"X velocity", yLabel:"Ẋ (km/s)" },
-      { title:"Y position", yLabel:"Y (km)" },
-      { title:"Y velocity", yLabel:"Ẏ (km/s)" },
-    ];
+    const labels = ["X", "Ẋ", "Y", "Ẏ"];
+    const units  = ["km", "km/s", "km", "km/s"];
 
-    const tNow = app.t;
-    app.viewStates.follow(tNow);
-    const tr = app.viewStates.getRange(tNow);
-    const tMin = tr.tMin, tMax = tr.tMax;
+    const t = app.tHist;
+    if (!t.length) return;
+    const tMin = t[0], tMax = t[t.length - 1];
 
     for (let i = 0; i < 4; i++) {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
+      const col = i % 2;
+      const row = Math.floor(i / 2);
       const x = pad + col * (tileW + pad);
       const y = pad + row * (tileH + pad);
 
-      const t = app.tHist;
       const truth = app.xTrueHist[i];
       const est = app.xHatHist[i];
       const sig = app.sigHist[i];
-      if (!t.length) continue;
 
       const up = new Array(est.length);
       const lo = new Array(est.length);
-      for (let k = 0; k < est.length; k++) {
-        up[k] = est[k] + 2*sig[k];
-        lo[k] = est[k] - 2*sig[k];
-      }
-      const { mn, mx } = computeMinMax([truth, est, up, lo]);
+      for (let k = 0; k < est.length; k++) { up[k] = est[k] + 2*sig[k]; lo[k] = est[k] - 2*sig[k]; }
 
-      drawAxesWithTicks(ctx, x, y, tileW, tileH, {
-        title: labels[i].title,
-        xLabel: row === (rows-1) ? "t (s)" : "",
-        yLabel: labels[i].yLabel,
-        xMin: tMin, xMax: tMax,
-        yMin: mn, yMax: mx
+      const { mn, mx } = computeMinMax([truth, est, up, lo]);
+      const ax = drawAxes(ctx, x, y, tileW, tileH, {
+        title: `${labels[i]} (${units[i]})`,
+        xLabel: "t (s)",
+        yLabel: units[i],
+        xTicks: { min: tMin, max: tMax, unit: "s", fmt: (v)=>fmt(v,0) },
+        yTicks: { min: mn, max: mx, unit: "", fmt: (v)=>fmt(v, (units[i]==="km")?0:3) }
       });
 
-      const px = x + 8, py = y + 26, pw = tileW - 16, ph = tileH - 34;
-
-      plotLine(ctx, px, py, pw, ph, t, truth, tMin, tMax, mn, mx, { stroke: "rgba(231,238,252,0.92)", width: 1.4 });
-      plotLine(ctx, px, py, pw, ph, t, est,   tMin, tMax, mn, mx, { stroke: "rgba(110,231,255,0.92)", width: 1.4 });
-      plotLine(ctx, px, py, pw, ph, t, up,    tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.70)", width: 1.1, dash: [6,4] });
-      plotLine(ctx, px, py, pw, ph, t, lo,    tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.70)", width: 1.1, dash: [6,4] });
+      const box = plotBoxesForTile(ax.plotX0, ax.plotY0, ax.plotW, ax.plotH);
+      plotLine(ctx, box, t, truth, tMin, tMax, mn, mx, { stroke: "rgba(15,23,42,0.75)", width: 1.5 });
+      plotLine(ctx, box, t, est,   tMin, tMax, mn, mx, { stroke: "rgba(37,99,235,0.85)", width: 1.5 });
+      plotLine(ctx, box, t, up,    tMin, tMax, mn, mx, { stroke: "rgba(234,88,12,0.75)", width: 1.2, dash: [6,4] });
+      plotLine(ctx, box, t, lo,    tMin, tMax, mn, mx, { stroke: "rgba(234,88,12,0.75)", width: 1.2, dash: [6,4] });
     }
   }
 
@@ -1469,69 +1413,87 @@
     const W = rect.width, H = rect.height;
     clearPanel(ctx, W, H);
 
-    const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
     const pad = 12;
-    const rows = 4;
     const tileW = W - pad*2;
-    const tileH = (H - pad*(rows+1)) / rows;
+    const tileH = (H - pad*5) / 4;
 
-    const labels = [
-      { title:"X position error", yLabel:"ΔX (km)" },
-      { title:"X velocity error", yLabel:"ΔẊ (km/s)" },
-      { title:"Y position error", yLabel:"ΔY (km)" },
-      { title:"Y velocity error", yLabel:"ΔẎ (km/s)" },
-    ];
+    const labels = ["X error (km)", "Ẋ error (km/s)", "Y error (km)", "Ẏ error (km/s)"];
 
-    const tNow = app.t;
-    app.viewErrors.follow(tNow);
-    const tr = app.viewErrors.getRange(tNow);
-    const tMin = tr.tMin, tMax = tr.tMax;
+    const t = app.tHist;
+    if (!t.length) return;
+    const tMin = t[0], tMax = t[t.length - 1];
 
     for (let i = 0; i < 4; i++) {
       const x = pad;
       const y = pad + i*(tileH + pad);
 
-      const t = app.tHist;
       const err = app.errHist[i];
       const sig = app.sigHist[i];
-      if (!t.length) continue;
 
       const up = new Array(err.length);
       const lo = new Array(err.length);
-      for (let k = 0; k < err.length; k++) {
-        up[k] = 2*sig[k];
-        lo[k] = -2*sig[k];
-      }
-      const { mn, mx } = computeMinMax([err, up, lo]);
+      for (let k = 0; k < err.length; k++) { up[k] = 2*sig[k]; lo[k] = -2*sig[k]; }
 
-      drawAxesWithTicks(ctx, x, y, tileW, tileH, {
-        title: labels[i].title,
-        xLabel: (i === 3) ? "t (s)" : "",
-        yLabel: labels[i].yLabel,
-        xMin: tMin, xMax: tMax,
-        yMin: mn, yMax: mx
+      const { mn, mx } = computeMinMax([err, up, lo]);
+      const ax = drawAxes(ctx, x, y, tileW, tileH, {
+        title: labels[i],
+        xLabel: (i===3) ? "t (s)" : "",
+        yLabel: "",
+        xTicks: { min: tMin, max: tMax, unit: "s", fmt: (v)=>fmt(v,0) },
+        yTicks: { min: mn, max: mx, unit: "", fmt: (v)=>fmt(v,3) }
       });
 
-      const px = x + 8, py = y + 26, pw = tileW - 16, ph = tileH - 34;
-
-      plotLine(ctx, px, py, pw, ph, t, err, tMin, tMax, mn, mx, { stroke: "rgba(110,231,255,0.92)", width: 1.4 });
-      plotLine(ctx, px, py, pw, ph, t, up,  tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.1, dash: [6,4] });
-      plotLine(ctx, px, py, pw, ph, t, lo,  tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.1, dash: [6,4] });
+      const box = plotBoxesForTile(ax.plotX0, ax.plotY0, ax.plotW, ax.plotH);
+      plotLine(ctx, box, t, err, tMin, tMax, mn, mx, { stroke: "rgba(37,99,235,0.85)", width: 1.5 });
+      plotLine(ctx, box, t, up,  tMin, tMax, mn, mx, { stroke: "rgba(234,88,12,0.75)", width: 1.2, dash: [6,4] });
+      plotLine(ctx, box, t, lo,  tMin, tMax, mn, mx, { stroke: "rgba(234,88,12,0.75)", width: 1.2, dash: [6,4] });
 
       // zero line
       ctx.save();
-      ctx.strokeStyle = "rgba(110,231,255,0.10)";
-      ctx.lineWidth = 1;
-      const y0 = py + ph * (1 - (0 - mn) / ((mx - mn) || 1));
       ctx.beginPath();
-      ctx.moveTo(px, y0);
-      ctx.lineTo(px + pw, y0);
+      ctx.rect(box.x, box.y, box.w, box.h);
+      ctx.clip();
+      ctx.strokeStyle = "rgba(100,116,139,0.35)";
+      ctx.lineWidth = 1;
+      const y0 = box.y + box.h * (1 - (0 - mn) / (mx - mn));
+      ctx.beginPath();
+      ctx.moveTo(box.x, y0);
+      ctx.lineTo(box.x + box.w, y0);
       ctx.stroke();
       ctx.restore();
-
-      // On very small screens, prioritize readability: fewer ticks
-      if (isMobile) { /* tick density handled by drawAxesWithTicks defaults */ }
     }
+  }
+
+  function computeTimeRangeForMeas() {
+    // Use whichever series has data; prevents "right-half-only" when buffers shift.
+    const candidates = [];
+    if (app.tHist.length) { candidates.push(app.tHist[0], app.tHist[app.tHist.length-1]); }
+    if (app.measT.length) { candidates.push(app.measT[0], app.measT[app.measT.length-1]); }
+    if (app.predT.length) { candidates.push(app.predT[0], app.predT[app.predT.length-1]); }
+
+    if (candidates.length < 2) return { tMin: 0, tMax: 1 };
+    let tMin = Infinity, tMax = -Infinity;
+    for (const v of candidates) {
+      if (!Number.isFinite(v)) continue;
+      tMin = Math.min(tMin, v);
+      tMax = Math.max(tMax, v);
+    }
+    if (!Number.isFinite(tMin) || !Number.isFinite(tMax) || tMax <= tMin) return { tMin: 0, tMax: 1 };
+    return { tMin, tMax };
+  }
+
+  function colorsFromStationIds(stIds, alpha = 0.85) {
+    const out = new Array(stIds.length);
+    for (let i = 0; i < stIds.length; i++) {
+      const id = stIds[i];
+      const c = (id>=1 && id<=12) ? ST_COLORS[id-1] : "#2563eb";
+      // convert hex to rgba string
+      const r = parseInt(c.slice(1,3),16);
+      const g = parseInt(c.slice(3,5),16);
+      const b = parseInt(c.slice(5,7),16);
+      out[i] = `rgba(${r},${g},${b},${alpha})`;
+    }
+    return out;
   }
 
   function drawMeasPlot() {
@@ -1547,102 +1509,189 @@
     const tileW = W - pad*2;
     const tileH = (H - pad*5) / 3;
 
-    const tNow = app.t;
-    app.viewMeas.follow(tNow);
-    const tr = app.viewMeas.getRange(tNow);
-    const tMin = tr.tMin;
-    const tMax = tr.tMax;
-
-    // Gather combined series ranges across stations for y scaling
-    const measRhoAll = [];
-    const predRhoAll = [];
-    const measRhodAll = [];
-    const predRhodAll = [];
-    const measPhiAll = [];
-    const predPhiAll = [];
-
-    for (let sid = 1; sid <= 12; sid++) {
-      const m = app.measByStation[sid-1];
-      const p = app.predByStation[sid-1];
-      measRhoAll.push(...m.rho);
-      predRhoAll.push(...p.rho);
-      measRhodAll.push(...m.rhod);
-      predRhodAll.push(...p.rhod);
-      measPhiAll.push(...m.phi);
-      predPhiAll.push(...p.phi);
-    }
+    const { tMin, tMax } = computeTimeRangeForMeas();
 
     // Range
     {
       const x = pad, y = pad;
-      const { mn, mx } = computeMinMax([measRhoAll, predRhoAll]);
-
-      drawAxesWithTicks(ctx, x, y, tileW, tileH, {
-        title: "Range ρ — measured vs predicted",
+      const { mn, mx } = computeMinMax([app.measRho, app.predRho]);
+      const ax = drawAxes(ctx, x, y, tileW, tileH, {
+        title: "Range ρ (km) — measured vs predicted",
         xLabel: "",
-        yLabel: "ρ (km)",
-        xMin: tMin, xMax: tMax,
-        yMin: mn, yMax: mx
+        yLabel: "km",
+        xTicks: { min: tMin, max: tMax, unit: "s", fmt: (v)=>fmt(v,0) },
+        yTicks: { min: mn, max: mx, unit: "km", fmt: (v)=>fmt(v,0) }
       });
+      const box = plotBoxesForTile(ax.plotX0, ax.plotY0, ax.plotW, ax.plotH);
 
-      const px = x+8, py = y+26, pw = tileW-16, ph = tileH-34;
-      for (let sid = 1; sid <= 12; sid++) {
-        const color = stationColor(sid);
-        const m = app.measByStation[sid-1];
-        const p = app.predByStation[sid-1];
+      const measColors = colorsFromStationIds(app.measStId, 0.85);
+      plotScatter(ctx, box, app.measT, app.measRho, tMin, tMax, mn, mx, { r: 2.3 }, measColors);
 
-        plotScatter(ctx, px, py, pw, ph, m.t, m.rho, tMin, tMax, mn, mx, { fill: hexToRgba(color, 0.85), r: 2.0 });
-        plotScatter(ctx, px, py, pw, ph, p.t, p.rho, tMin, tMax, mn, mx, { fill: "rgba(255,107,107,0.70)", r: 1.8 });
-      }
+      // predicted: slightly transparent black
+      plotScatter(ctx, box, app.predT, app.predRho, tMin, tMax, mn, mx, { fill: "rgba(15,23,42,0.35)", r: 2.0 });
     }
 
     // Range-rate
     {
       const x = pad, y = pad + (tileH + pad);
-      const { mn, mx } = computeMinMax([measRhodAll, predRhodAll]);
-
-      drawAxesWithTicks(ctx, x, y, tileW, tileH, {
-        title: "Range-rate ρ̇ — measured vs predicted",
+      const { mn, mx } = computeMinMax([app.measRhod, app.predRhod]);
+      const ax = drawAxes(ctx, x, y, tileW, tileH, {
+        title: "Range-rate ρ̇ (km/s) — measured vs predicted",
         xLabel: "",
-        yLabel: "ρ̇ (km/s)",
-        xMin: tMin, xMax: tMax,
-        yMin: mn, yMax: mx
+        yLabel: "km/s",
+        xTicks: { min: tMin, max: tMax, unit: "s", fmt: (v)=>fmt(v,0) },
+        yTicks: { min: mn, max: mx, unit: "km/s", fmt: (v)=>fmt(v,4) }
       });
+      const box = plotBoxesForTile(ax.plotX0, ax.plotY0, ax.plotW, ax.plotH);
 
-      const px = x+8, py = y+26, pw = tileW-16, ph = tileH-34;
-      for (let sid = 1; sid <= 12; sid++) {
-        const color = stationColor(sid);
-        const m = app.measByStation[sid-1];
-        const p = app.predByStation[sid-1];
-
-        plotScatter(ctx, px, py, pw, ph, m.t, m.rhod, tMin, tMax, mn, mx, { fill: hexToRgba(color, 0.85), r: 2.0 });
-        plotScatter(ctx, px, py, pw, ph, p.t, p.rhod, tMin, tMax, mn, mx, { fill: "rgba(255,107,107,0.70)", r: 1.8 });
-      }
+      const measColors = colorsFromStationIds(app.measStId, 0.85);
+      plotScatter(ctx, box, app.measT, app.measRhod, tMin, tMax, mn, mx, { r: 2.3 }, measColors);
+      plotScatter(ctx, box, app.predT, app.predRhod, tMin, tMax, mn, mx, { fill: "rgba(15,23,42,0.35)", r: 2.0 });
     }
 
-    // Bearing
+    // Angle
     {
       const x = pad, y = pad + 2*(tileH + pad);
-      const { mn, mx } = computeMinMax([measPhiAll, predPhiAll]);
-
-      drawAxesWithTicks(ctx, x, y, tileW, tileH, {
-        title: "Bearing φ — measured vs predicted",
+      const { mn, mx } = computeMinMax([app.measPhi, app.predPhi]);
+      const ax = drawAxes(ctx, x, y, tileW, tileH, {
+        title: "Angle φ (rad) — measured vs predicted",
         xLabel: "t (s)",
-        yLabel: "φ (rad)",
-        xMin: tMin, xMax: tMax,
-        yMin: mn, yMax: mx
+        yLabel: "rad",
+        xTicks: { min: tMin, max: tMax, unit: "s", fmt: (v)=>fmt(v,0) },
+        yTicks: { min: mn, max: mx, unit: "rad", fmt: (v)=>fmt(v,3) }
       });
+      const box = plotBoxesForTile(ax.plotX0, ax.plotY0, ax.plotW, ax.plotH);
 
-      const px = x+8, py = y+26, pw = tileW-16, ph = tileH-34;
-      for (let sid = 1; sid <= 12; sid++) {
-        const color = stationColor(sid);
-        const m = app.measByStation[sid-1];
-        const p = app.predByStation[sid-1];
-
-        plotScatter(ctx, px, py, pw, ph, m.t, m.phi, tMin, tMax, mn, mx, { fill: hexToRgba(color, 0.85), r: 2.0 });
-        plotScatter(ctx, px, py, pw, ph, p.t, p.phi, tMin, tMax, mn, mx, { fill: "rgba(255,107,107,0.70)", r: 1.8 });
-      }
+      const measColors = colorsFromStationIds(app.measStId, 0.85);
+      plotScatter(ctx, box, app.measT, app.measPhi, tMin, tMax, mn, mx, { r: 2.3 }, measColors);
+      plotScatter(ctx, box, app.predT, app.predPhi, tMin, tMax, mn, mx, { fill: "rgba(15,23,42,0.35)", r: 2.0 });
     }
+  }
+
+  function drawTrajPlot() {
+    const ctx = app.ctxTraj;
+    const canvas = el.plotTraj;
+    if (!ctx || !canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const W = rect.width, H = rect.height;
+    clearPanel(ctx, W, H);
+
+    const pad = 12;
+    const x0 = pad, y0 = pad;
+    const w = W - pad*2, h = H - pad*2;
+
+    // build extents from truth and estimate (XY)
+    const Xs = app.xTrueHist[0].concat(app.xHatHist[0].filter(Number.isFinite));
+    const Ys = app.xTrueHist[2].concat(app.xHatHist[2].filter(Number.isFinite));
+    const { mn: xmin0, mx: xmax0 } = computeMinMax([Xs]);
+    const { mn: ymin0, mx: ymax0 } = computeMinMax([Ys]);
+
+    let xmin = xmin0, xmax = xmax0, ymin = ymin0, ymax = ymax0;
+    const xr = xmax - xmin, yr = ymax - ymin;
+    const r = Math.max(1e-6, Math.max(xr, yr));
+    const xc = 0.5*(xmin + xmax);
+    const yc = 0.5*(ymin + ymax);
+    xmin = xc - 0.5*r; xmax = xc + 0.5*r;
+    ymin = yc - 0.5*r; ymax = yc + 0.5*r;
+
+    const ax = drawAxes(ctx, x0, y0, w, h, {
+      title: "Inertial XY trajectory (km) — stations + links",
+      xLabel: "X (km)",
+      yLabel: "Y (km)",
+      xTicks: { min: xmin, max: xmax, unit: "km", fmt: (v)=>fmt(v,0) },
+      yTicks: { min: ymin, max: ymax, unit: "km", fmt: (v)=>fmt(v,0) }
+    });
+
+    const box = plotBoxesForTile(ax.plotX0, ax.plotY0, ax.plotW, ax.plotH);
+    const sx = (X) => box.x + (X - xmin)/(xmax - xmin) * box.w;
+    const sy = (Y) => box.y + box.h - (Y - ymin)/(ymax - ymin) * box.h;
+
+    // clip
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(box.x, box.y, box.w, box.h);
+    ctx.clip();
+
+    // Earth (guard against negative radius)
+    const RePx = Math.max(0, (app.Re/(xmax-xmin))*(box.w));
+    if (Number.isFinite(RePx) && RePx > 0) {
+      ctx.beginPath();
+      ctx.arc(sx(0), sy(0), RePx, 0, 2*Math.PI);
+      ctx.fillStyle = "rgba(249,115,22,0.08)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(249,115,22,0.22)";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+
+    // Stations
+    for (let i = 1; i <= 12; i++) {
+      const s = stationState(i - 1, app.t, app.Re, app.omega);
+      ctx.beginPath();
+      ctx.arc(sx(s.X), sy(s.Y), 2.6, 0, 2*Math.PI);
+      ctx.fillStyle = ST_COLORS[i-1];
+      ctx.globalAlpha = 0.9;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // Truth path
+    ctx.strokeStyle = "rgba(15,23,42,0.70)";
+    ctx.lineWidth = 1.7;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    for (let i = 0; i < app.tHist.length; i++) {
+      const X = app.xTrueHist[0][i], Y = app.xTrueHist[2][i];
+      if (!Number.isFinite(X) || !Number.isFinite(Y)) continue;
+      if (i === 0) ctx.moveTo(sx(X), sy(Y));
+      else ctx.lineTo(sx(X), sy(Y));
+    }
+    ctx.stroke();
+
+    // Estimate path
+    ctx.strokeStyle = "rgba(37,99,235,0.85)";
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([6,4]);
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < app.tHist.length; i++) {
+      const X = app.xHatHist[0][i], Y = app.xHatHist[2][i];
+      if (!Number.isFinite(X) || !Number.isFinite(Y)) continue;
+      if (!started) { ctx.moveTo(sx(X), sy(Y)); started = true; }
+      else ctx.lineTo(sx(X), sy(Y));
+    }
+    if (started) ctx.stroke();
+    ctx.setLineDash([]);
+
+    // If we have a current measurement set, draw links to visible stations
+    const vis = visibleStations(app.truth, app.t, app.Re, app.omega);
+    for (const id of vis) {
+      const s = stationState(id - 1, app.t, app.Re, app.omega);
+      ctx.strokeStyle = ST_COLORS[id-1];
+      ctx.globalAlpha = 0.18;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx(app.truth[0]), sy(app.truth[2]));
+      ctx.lineTo(sx(s.X), sy(s.Y));
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // Markers (truth + estimate)
+    ctx.beginPath();
+    ctx.arc(sx(app.truth[0]), sy(app.truth[2]), 4.2, 0, 2*Math.PI);
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(15,23,42,0.35)";
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(sx(app.ekf.x[0]), sy(app.ekf.x[2]), 4.0, 0, 2*Math.PI);
+    ctx.fillStyle = "rgba(37,99,235,0.90)";
+    ctx.fill();
+    ctx.restore();
   }
 
   function drawConsPlot() {
@@ -1659,18 +1708,13 @@
     const tileH = (H - pad*4) / 2;
 
     const alpha = clamp(parseFloat(el.inpAlpha?.value) || 0.05, 0.01, 0.2);
-
-    const tNow = app.t;
-    app.viewCons.follow(tNow);
-    const tr = app.viewCons.getRange(tNow);
-    const tMin = tr.tMin, tMax = tr.tMax;
-
     const t = app.tHist;
+    const tMin = t.length ? t[0] : 0;
+    const tMax = t.length ? t[t.length-1] : 1;
 
     // NEES df=4
     {
       const x = pad, y = pad;
-
       const df = 4;
       const lo = chi2Inv(alpha/2, df);
       const hi = chi2Inv(1 - alpha/2, df);
@@ -1678,25 +1722,22 @@
       const yHi = new Array(t.length).fill(hi);
 
       const { mn, mx } = computeMinMax([app.neesHist, yLo, yHi]);
-
-      drawAxesWithTicks(ctx, x, y, tileW, tileH, {
-        title: "NEES with χ² bounds",
+      const ax = drawAxes(ctx, x, y, tileW, tileH, {
+        title: "NEES (df = 4) with χ² bounds",
         xLabel: "",
-        yLabel: "NEES (—)",
-        xMin: tMin, xMax: tMax,
-        yMin: mn, yMax: mx
+        yLabel: "",
+        xTicks: { min: tMin, max: tMax, unit: "s", fmt: (v)=>fmt(v,0) },
+        yTicks: { min: mn, max: mx, unit: "", fmt: (v)=>fmt(v,1) }
       });
-
-      const px = x+8, py = y+26, pw = tileW-16, ph = tileH-34;
-      plotLine(ctx, px, py, pw, ph, t, app.neesHist, tMin, tMax, mn, mx, { stroke: "rgba(110,231,255,0.92)", width: 1.4 });
-      plotLine(ctx, px, py, pw, ph, t, yLo,        tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.1, dash: [6,4] });
-      plotLine(ctx, px, py, pw, ph, t, yHi,        tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.1, dash: [6,4] });
+      const box = plotBoxesForTile(ax.plotX0, ax.plotY0, ax.plotW, ax.plotH);
+      plotLine(ctx, box, t, app.neesHist, tMin, tMax, mn, mx, { stroke: "rgba(37,99,235,0.85)", width: 1.5 });
+      plotLine(ctx, box, t, yLo, tMin, tMax, mn, mx, { stroke: "rgba(234,88,12,0.75)", width: 1.2, dash: [6,4] });
+      plotLine(ctx, box, t, yHi, tMin, tMax, mn, mx, { stroke: "rgba(234,88,12,0.75)", width: 1.2, dash: [6,4] });
     }
 
     // NIS df=3*visible
     {
       const x = pad, y = pad + tileH + pad;
-
       const loArr = [];
       const hiArr = [];
       for (let i = 0; i < app.nisDfHist.length; i++) {
@@ -1707,30 +1748,52 @@
       }
 
       const { mn, mx } = computeMinMax([app.nisHist, loArr, hiArr]);
-
-      drawAxesWithTicks(ctx, x, y, tileW, tileH, {
-        title: "NIS with χ² bounds",
+      const ax = drawAxes(ctx, x, y, tileW, tileH, {
+        title: "NIS with χ² bounds (df = 3×visible)",
         xLabel: "t (s)",
-        yLabel: "NIS (—)",
-        xMin: tMin, xMax: tMax,
-        yMin: mn, yMax: mx
+        yLabel: "",
+        xTicks: { min: tMin, max: tMax, unit: "s", fmt: (v)=>fmt(v,0) },
+        yTicks: { min: mn, max: mx, unit: "", fmt: (v)=>fmt(v,1) }
       });
-
-      const px = x+8, py = y+26, pw = tileW-16, ph = tileH-34;
-      plotLine(ctx, px, py, pw, ph, t, app.nisHist, tMin, tMax, mn, mx, { stroke: "rgba(110,231,255,0.92)", width: 1.4 });
-      plotLine(ctx, px, py, pw, ph, t, loArr,      tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.1, dash: [6,4] });
-      plotLine(ctx, px, py, pw, ph, t, hiArr,      tMin, tMax, mn, mx, { stroke: "rgba(255,204,102,0.75)", width: 1.1, dash: [6,4] });
+      const box = plotBoxesForTile(ax.plotX0, ax.plotY0, ax.plotW, ax.plotH);
+      plotLine(ctx, box, t, app.nisHist, tMin, tMax, mn, mx, { stroke: "rgba(37,99,235,0.85)", width: 1.5 });
+      plotLine(ctx, box, t, loArr, tMin, tMax, mn, mx, { stroke: "rgba(234,88,12,0.75)", width: 1.2, dash: [6,4] });
+      plotLine(ctx, box, t, hiArr, tMin, tMax, mn, mx, { stroke: "rgba(234,88,12,0.75)", width: 1.2, dash: [6,4] });
     }
+  }
+
+  // -----------------------------
+  // Tabs
+  // -----------------------------
+  function setupTabs() {
+    const panes = {
+      states: el.paneStates,
+      errors: el.paneErrors,
+      meas: el.paneMeas,
+      traj: el.paneTraj,
+      cons: el.paneCons,
+    };
+
+    function activate(name) {
+      (el.tabs || []).forEach(t => t.classList.toggle("is-active", t.dataset.tab === name));
+      Object.entries(panes).forEach(([k, p]) => { if (p) p.classList.toggle("is-active", k === name); });
+
+      // canvases change size when display toggles; rebind HiDPI and redraw
+      handleResize(true);
+    }
+
+    (el.tabs || []).forEach(btn => {
+      btn.addEventListener("click", () => activate(btn.dataset.tab));
+    });
+
+    // default active tab if none set
+    const anyActive = (el.tabs || []).some(t => t.classList.contains("is-active"));
+    if (!anyActive) activate("states");
   }
 
   // -----------------------------
   // Orbit canvas pan/zoom
   // -----------------------------
-  function getPointerXY(e) {
-    if (e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    return { x: e.clientX, y: e.clientY };
-  }
-
   function setupOrbitPanZoom() {
     const canvas = el.orbitCanvas;
     if (!canvas) return;
@@ -1761,7 +1824,6 @@
         pinch.mid0 = { x: (A.x + B.x)/2 - rect.left, y: (A.y + B.y)/2 - rect.top };
         panning = false;
       }
-
       e.preventDefault();
     }, { passive: false });
 
@@ -1779,7 +1841,7 @@
 
         const dist = Math.hypot(B.x - A.x, B.y - A.y);
         const scale = dist / (pinch.dist0 + 1e-9);
-        const newKmPerPx = clamp(pinch.kmPerPx0 / scale, 2, 500);
+        const newKmPerPx = clamp(pinch.kmPerPx0 / scale, 2, 600);
 
         const mid = pinch.mid0;
         const before = app.cam.screenToWorld(mid.x, mid.y, W, H);
@@ -1788,6 +1850,7 @@
         app.cam.cx += (before.x - after.x);
         app.cam.cy += (before.y - after.y);
 
+        app.plotDirty = true;
         e.preventDefault();
         return;
       }
@@ -1801,6 +1864,7 @@
       app.cam.cx -= dx * app.cam.kmPerPx;
       app.cam.cy -= dy * app.cam.kmPerPx;
 
+      app.plotDirty = true;
       e.preventDefault();
     }, { passive: false });
 
@@ -1821,248 +1885,164 @@
 
       const before = app.cam.screenToWorld(mx, my, W, H);
       const zoom = Math.exp(-e.deltaY * 0.0015);
-      app.cam.kmPerPx = clamp(app.cam.kmPerPx / zoom, 2, 500);
+      app.cam.kmPerPx = clamp(app.cam.kmPerPx / zoom, 2, 600);
       const after = app.cam.screenToWorld(mx, my, W, H);
-
       app.cam.cx += (before.x - after.x);
       app.cam.cy += (before.y - after.y);
+
+      app.plotDirty = true;
       e.preventDefault();
     }, { passive: false });
 
     if (el.btnResetView) el.btnResetView.addEventListener("click", () => app.cam.reset(app.Re));
     if (el.btnCenterView) el.btnCenterView.addEventListener("click", () => { app.cam.cx = 0; app.cam.cy = 0; });
-    if (el.btnZoomToSat) el.btnZoomToSat.addEventListener("click", () => {
-      // zoom in tight around spacecraft to highlight measurement effects
-      app.cam.cx = app.truth[0];
-      app.cam.cy = app.truth[2];
-      app.cam.kmPerPx = clamp(app.Re / 900, 2, 30);
-    });
+    if (el.btnZoomCraft) el.btnZoomCraft.addEventListener("click", () => zoomToCraft());
+  }
+
+  function zoomToCraft() {
+    // Put the truth spacecraft near center and zoom tighter.
+    app.cam.cx = app.truth[0];
+    app.cam.cy = app.truth[2];
+
+    // zoom based on altitude, but clamp so it always looks good
+    const r = Math.sqrt(app.truth[0]*app.truth[0] + app.truth[2]*app.truth[2]);
+    const alt = Math.max(50, r - app.Re);
+    // show ~2–3 Earth radii worth of local region around craft: smaller km/px = more zoom in
+    const target = clamp(alt / 25, 2.5, 80);
+    app.cam.kmPerPx = target;
   }
 
   // -----------------------------
-  // Time-window pan/zoom on plots (paused only)
+  // Thrust controls
   // -----------------------------
-  function attachPlotPanZoom(canvas, view) {
-    if (!canvas) return;
-    let dragging = false;
-    let lastX = 0;
-
-    canvas.addEventListener("pointerdown", (e) => {
-      if (app.running) return;
-      dragging = true;
-      view.userTouched();
-      lastX = e.clientX;
-      canvas.setPointerCapture(e.pointerId);
-      e.preventDefault();
-    }, { passive:false });
-
-    canvas.addEventListener("pointermove", (e) => {
-      if (app.running || !dragging) return;
-      const dx = e.clientX - lastX;
-      lastX = e.clientX;
-      // pan in time: pixels -> seconds (approx)
-      const rect = canvas.getBoundingClientRect();
-      const secPerPx = view.windowSec / Math.max(50, rect.width);
-      view.pan(-dx * secPerPx);
-      app.plotDirty = true;
-      e.preventDefault();
-    }, { passive:false });
-
-    canvas.addEventListener("pointerup", () => { dragging = false; }, { passive:true });
-    canvas.addEventListener("pointercancel", () => { dragging = false; }, { passive:true });
-
-    canvas.addEventListener("wheel", (e) => {
-      if (app.running) return;
-      view.userTouched();
-      const zoom = Math.exp(-e.deltaY * 0.0012);
-      view.zoom(zoom);
-      app.plotDirty = true;
-      e.preventDefault();
-    }, { passive:false });
-  }
-
-  // -----------------------------
-  // Thrust control (“joystick” buttons + WASD)
-  // -----------------------------
-  function readThrustMagKmps2() {
-    // Prefer m/s^2 input if present, convert to km/s^2
-    if (el.inpThrustMagMS2 && el.inpThrustMagMS2.value !== "") {
-      const a = parseFloat(el.inpThrustMagMS2.value);
-      if (Number.isFinite(a)) return clamp(a, 0, 0.2) / 1000; // m/s^2 -> km/s^2
+  function readThrustMagnitude() {
+    if (el.inpThrust) {
+      const v = parseFloat(el.inpThrust.value);
+      if (Number.isFinite(v) && v >= 0) return v;
     }
-    if (el.inpThrustMag && el.inpThrustMag.value !== "") {
-      const a = parseFloat(el.inpThrustMag.value);
-      if (Number.isFinite(a)) return clamp(a, 0, 2e-4); // km/s^2
-    }
-    // fallback: mild constant
-    return 0.0;
+    return app.thrustMag;
   }
 
-  function updateThrustCommand() {
-    app.thrustMag = readThrustMagKmps2();
+  function applyThrustFromInputs() {
+    const mag = readThrustMagnitude();
+    app.thrustMag = mag;
+
+    const up = app.thrustKeys.up || app.thrustButtonsHeld.up;
+    const down = app.thrustKeys.down || app.thrustButtonsHeld.down;
+    const left = app.thrustKeys.left || app.thrustButtonsHeld.left;
+    const right = app.thrustKeys.right || app.thrustButtonsHeld.right;
 
     let ax = 0, ay = 0;
-    if (app.uHold.up) ay += 1;
-    if (app.uHold.down) ay -= 1;
-    if (app.uHold.right) ax += 1;
-    if (app.uHold.left) ax -= 1;
+    if (left) ax -= mag;
+    if (right) ax += mag;
+    if (up) ay += mag;
+    if (down) ay -= mag;
 
-    // normalize diagonals
+    // normalize diagonals (keeps accel magnitude consistent)
     const n = Math.hypot(ax, ay);
-    if (n > 1e-9) { ax /= n; ay /= n; }
+    if (n > mag && n > 0) { ax = ax / n * mag; ay = ay / n * mag; }
 
-    app.uCmd[0] = ax * app.thrustMag;
-    app.uCmd[1] = ay * app.thrustMag;
+    app.u[0] = ax;
+    app.u[1] = ay;
   }
 
-  function bindHoldButton(btn, dirKey) {
-    if (!btn) return;
-    const down = () => { app.uHold[dirKey] = true; updateThrustCommand(); };
-    const up = () => { app.uHold[dirKey] = false; updateThrustCommand(); };
-
-    btn.addEventListener("pointerdown", (e) => { btn.setPointerCapture(e.pointerId); down(); e.preventDefault(); }, { passive:false });
-    btn.addEventListener("pointerup", (e) => { up(); e.preventDefault(); }, { passive:false });
-    btn.addEventListener("pointercancel", () => { up(); }, { passive:true });
-    btn.addEventListener("pointerleave", () => { /* leave doesn’t necessarily cancel capture */ }, { passive:true });
-  }
-
-  function setupThrustUI() {
-    bindHoldButton(el.thrUp, "up");
-    bindHoldButton(el.thrDown, "down");
-    bindHoldButton(el.thrLeft, "left");
-    bindHoldButton(el.thrRight, "right");
-
-    if (el.thrZero) {
-      el.thrZero.addEventListener("click", () => {
-        app.uHold.up = app.uHold.down = app.uHold.left = app.uHold.right = false;
-        updateThrustCommand();
-      });
-    }
-
+  function setupThrustControls() {
+    // Keyboard: arrows or WASD
     window.addEventListener("keydown", (e) => {
       const k = e.key.toLowerCase();
-      if (k === "w") app.uHold.up = true;
-      if (k === "s") app.uHold.down = true;
-      if (k === "a") app.uHold.left = true;
-      if (k === "d") app.uHold.right = true;
-      if (k === " ") { app.uHold.up = app.uHold.down = app.uHold.left = app.uHold.right = false; }
-      updateThrustCommand();
-    });
+      if (k === "arrowup" || k === "w") { app.thrustKeys.up = true; e.preventDefault(); }
+      if (k === "arrowdown" || k === "s") { app.thrustKeys.down = true; e.preventDefault(); }
+      if (k === "arrowleft" || k === "a") { app.thrustKeys.left = true; e.preventDefault(); }
+      if (k === "arrowright" || k === "d") { app.thrustKeys.right = true; e.preventDefault(); }
+      if (k === " " || k === "x") { // quick cut-off
+        app.thrustKeys = { up:false, down:false, left:false, right:false };
+        app.thrustButtonsHeld = { up:false, down:false, left:false, right:false };
+        app.u[0] = 0; app.u[1] = 0;
+      }
+    }, { passive: false });
 
     window.addEventListener("keyup", (e) => {
       const k = e.key.toLowerCase();
-      if (k === "w") app.uHold.up = false;
-      if (k === "s") app.uHold.down = false;
-      if (k === "a") app.uHold.left = false;
-      if (k === "d") app.uHold.right = false;
-      updateThrustCommand();
+      if (k === "arrowup" || k === "w") { app.thrustKeys.up = false; }
+      if (k === "arrowdown" || k === "s") { app.thrustKeys.down = false; }
+      if (k === "arrowleft" || k === "a") { app.thrustKeys.left = false; }
+      if (k === "arrowright" || k === "d") { app.thrustKeys.right = false; }
     });
-  }
 
-  // -----------------------------
-  // Visual link events
-  // -----------------------------
-  function spawnSignalPulses(xTrue, tNow, stationIds) {
-    for (const id of stationIds) {
-      const s = stationState(id - 1, tNow, app.Re, app.omega);
-      app.pulses.push({
-        t0: performance.now(),
-        dur: 360,
-        sx: xTrue[0],
-        sy: xTrue[2],
-        tx: s.X,
-        ty: s.Y,
-        id,
-        color: stationColor(id),
+    // Button hold helpers
+    function hold(btn, dir) {
+      if (!btn) return;
+      btn.addEventListener("pointerdown", (e) => {
+        btn.setPointerCapture(e.pointerId);
+        app.thrustButtonsHeld[dir] = true;
+        e.preventDefault();
+      }, { passive: false });
+      btn.addEventListener("pointerup", () => { app.thrustButtonsHeld[dir] = false; });
+      btn.addEventListener("pointercancel", () => { app.thrustButtonsHeld[dir] = false; });
+      btn.addEventListener("pointerleave", () => { app.thrustButtonsHeld[dir] = false; });
+    }
+    hold(el.btnThUp, "up");
+    hold(el.btnThDown, "down");
+    hold(el.btnThLeft, "left");
+    hold(el.btnThRight, "right");
+
+    if (el.btnThZero) {
+      el.btnThZero.addEventListener("click", () => {
+        app.thrustKeys = { up:false, down:false, left:false, right:false };
+        app.thrustButtonsHeld = { up:false, down:false, left:false, right:false };
+        app.u[0] = 0; app.u[1] = 0;
       });
     }
-    if (app.pulses.length > 240) app.pulses.splice(0, app.pulses.length - 240);
   }
 
   // -----------------------------
   // Simulation step
   // -----------------------------
-  function wouldImpactEarth(nextX) {
-    const r = Math.hypot(nextX[0], nextX[2]);
-    return r <= (CONST.Re + 1.0);
-  }
-
-  function captureSafeState() {
-    app.lastSafeState = {
-      t: app.t,
-      k: app.k,
-      truth: new Float64Array(app.truth),
-      ekfX: new Float64Array(app.ekf.x),
-      ekfP: matCopy(app.ekf.P),
-    };
-  }
-
-  function restoreSafeState() {
-    if (!app.lastSafeState) return;
-    app.t = app.lastSafeState.t;
-    app.k = app.lastSafeState.k;
-    app.truth = new Float64Array(app.lastSafeState.truth);
-    app.ekf.x = new Float64Array(app.lastSafeState.ekfX);
-    app.ekf.P = matCopy(app.lastSafeState.ekfP);
+  function checkCrash(xTrueNext) {
+    const r = Math.sqrt(xTrueNext[0]*xTrueNext[0] + xTrueNext[2]*xTrueNext[2]);
+    return r <= (app.Re + 1.0); // 1 km guard band
   }
 
   function simulateOneStep() {
+    if (app.crashed) return;
+
+    // dt adjustable
+    if (el.inpDt) {
+      const dtUI = parseFloat(el.inpDt.value);
+      if (Number.isFinite(dtUI)) app.dt = clamp(dtUI, 0.5, 120);
+    }
+    if (el.inpSteps) {
+      const kUI = parseInt(el.inpSteps.value, 10);
+      if (Number.isFinite(kUI)) app.Kmax = clamp(kUI, 1000, 10_000_000);
+    }
+
     if (app.k >= app.Kmax) {
       setRunning(false);
       return;
     }
 
-    // Live toggles / noise params (if present)
-    app.enableProcNoise = !!(el.tglProcNoise?.checked ?? true);
-    app.enableMeasNoise = !!(el.tglMeasNoise?.checked ?? true);
+    // toggles
+    app.enableProcNoise = !!el.tglProcNoise?.checked;
+    app.enableMeasNoise = !!el.tglMeasNoise?.checked;
 
-    // True noise (slightly adjustable)
-    if (el.inpQtrueAx || el.inpQtrueAy) {
-      const qx = parseFloat(el.inpQtrueAx?.value) || app.QtrueAcc[0][0];
-      const qy = parseFloat(el.inpQtrueAy?.value) || app.QtrueAcc[1][1];
-      app.QtrueAcc = buildQacc(Math.max(0, qx), Math.max(0, qy));
-    }
-    if (el.inpRtrueRho || el.inpRtrueRhod || el.inpRtruePhi) {
-      const sr = parseFloat(el.inpRtrueRho?.value) || 5;
-      const sv = parseFloat(el.inpRtrueRhod?.value) || 0.01;
-      const sa = parseFloat(el.inpRtruePhi?.value) || 0.01;
-      app.RtrueStn = buildRstn(Math.max(0, sr), Math.max(0, sv), Math.max(0, sa));
-    }
+    // apply thrust state (from keys/buttons)
+    applyThrustFromInputs();
 
-    // EKF noise
-    const qkfAx = parseFloat(el.inpQkfAx?.value) || 1e-8;
-    const qkfAy = parseFloat(el.inpQkfAy?.value) || 1e-8;
-    const rkfRho = parseFloat(el.inpRkfRho?.value) || 5;
-    const rkfRhod = parseFloat(el.inpRkfRhod?.value) || 0.01;
-    const rkfPhi = parseFloat(el.inpRkfPhi?.value) || 0.01;
-
+    // EKF noise assumptions (live)
     app.ekf.setQR(
-      buildQacc(Math.max(0, qkfAx), Math.max(0, qkfAy)),
-      buildRstn(Math.max(0, rkfRho), Math.max(0, rkfRhod), Math.max(0, rkfPhi))
+      buildQacc(parseFloat(el.inpQkfAx?.value) || 1e-10, parseFloat(el.inpQkfAy?.value) || 1e-10),
+      buildRstn(parseFloat(el.inpRkfRho?.value) || 0.05, parseFloat(el.inpRkfRhod?.value) || 4e-4, parseFloat(el.inpRkfPhi?.value) || 2e-3)
     );
 
-    // Force command update
-    updateThrustCommand();
+    // truth noise (live)
+    app.QtrueAcc = buildQacc(parseFloat(el.inpQtrueAx?.value) || 1e-10, parseFloat(el.inpQtrueAy?.value) || 1e-10);
+    app.RtrueStn = buildRstn(parseFloat(el.inpRtrueRho?.value) || 0.05, parseFloat(el.inpRtrueRhod?.value) || 4e-4, parseFloat(el.inpRtruePhi?.value) || 2e-3);
 
     const dt = app.dt;
     const tNext = app.t + dt;
 
-    // Save a safe state occasionally for recovery
-    if (app.k % 5 === 0) captureSafeState();
-
-    // Truth propagation
-    let xTrueNext = rk4Step(app.truth, app.uCmd, dt, app.mu);
-
-    // If thrust pushes into Earth, stop and recover
-    if (wouldImpactEarth(xTrueNext)) {
-      setRunning(false);
-      restoreSafeState();
-      // Clear thrust latch (prevents repeated impact)
-      app.uHold.up = app.uHold.down = app.uHold.left = app.uHold.right = false;
-      updateThrustCommand();
-      app.plotDirty = true;
-      return;
-    }
+    // propagate truth
+    let xTrueNext = rk4Step(app.truth, app.u, dt, app.mu);
 
     if (app.enableProcNoise) {
       const QdTrue = QdFromQacc(app.QtrueAcc, dt);
@@ -2070,16 +2050,26 @@
       for (let i = 0; i < 4; i++) xTrueNext[i] += w[i];
     }
 
-    // Visible stations at tNext
+    // crash check
+    if (checkCrash(xTrueNext)) {
+      app.crashed = true;
+      setRunning(false);
+      safeText(el.statusRun, "STOPPED");
+      // cut thrust
+      app.u[0] = 0; app.u[1] = 0;
+      return;
+    }
+
+    // visible stations
     const vis = visibleStations(xTrueNext, tNext, app.Re, app.omega);
 
-    // Measurements (stacked)
+    // build measurement vector
     let yMeas = new Float64Array(0);
     if (vis.length > 0) {
       yMeas = new Float64Array(3 * vis.length);
+
       for (let k = 0; k < vis.length; k++) {
-        const sid = vis[k];
-        const m = measureOneStation(xTrueNext, tNext, sid, app.Re, app.omega);
+        const m = measureOneStation(xTrueNext, tNext, vis[k], app.Re, app.omega);
         yMeas[3*k+0] = m.rho;
         yMeas[3*k+1] = m.rhod;
         yMeas[3*k+2] = m.phi;
@@ -2094,103 +2084,119 @@
           }
         }
         const v = sampleMVN(mDim, R, app.randn);
+
+        // wrap angle noise more realistically: it’s just additive in rad
         for (let i = 0; i < mDim; i++) yMeas[i] += v[i];
       }
 
-      // Store colored measurements by station
+      // store measurements per station (color mapping)
       for (let k = 0; k < vis.length; k++) {
-        const sid = vis[k];
-        const bin = app.measByStation[sid-1];
-        pushLimited(bin.t, tNext);
-        pushLimited(bin.rho,  yMeas[3*k+0]);
-        pushLimited(bin.rhod, yMeas[3*k+1]);
-        pushLimited(bin.phi,  yMeas[3*k+2]);
+        const stId = vis[k];
+        pushLimited(app.measT, tNext);
+        pushLimited(app.measRho, yMeas[3*k+0]);
+        pushLimited(app.measRhod, yMeas[3*k+1]);
+        pushLimited(app.measPhi, yMeas[3*k+2]);
+        pushLimited(app.measStId, stId);
       }
     }
 
     // EKF update
-    app.ekf.step(dt, tNext, app.uCmd, yMeas, vis);
+    app.ekf.step(dt, tNext, app.u, yMeas, vis);
 
-    // Predicted measurement storage per station
-    if (app.ekf.lastYhat && app.ekf.lastStationIds && app.ekf.lastStationIds.length > 0) {
+    // store predicted yhat (color it by station too)
+    if (app.ekf.lastYhat && app.ekf.lastYhat.length > 0 && app.ekf.lastStationIds && app.ekf.lastStationIds.length) {
       const yhat = app.ekf.lastYhat;
-      const ids = app.ekf.lastStationIds;
-      for (let k = 0; k < ids.length; k++) {
-        const sid = ids[k];
-        const bin = app.predByStation[sid-1];
-        pushLimited(bin.t, tNext);
-        pushLimited(bin.rho,  yhat[3*k+0]);
-        pushLimited(bin.rhod, yhat[3*k+1]);
-        pushLimited(bin.phi,  yhat[3*k+2]);
+      const st = app.ekf.lastStationIds;
+      const n = Math.min(st.length, yhat.length / 3);
+
+      for (let k = 0; k < n; k++) {
+        pushLimited(app.predT, tNext);
+        pushLimited(app.predRho, yhat[3*k+0]);
+        pushLimited(app.predRhod, yhat[3*k+1]);
+        pushLimited(app.predPhi, yhat[3*k+2]);
+        pushLimited(app.predStId, st[k]);
       }
     }
 
-    // pulses (visual event)
-    if (vis.length > 0) spawnSignalPulses(xTrueNext, tNext, vis);
+    // visuals: measurement link pulses
+    if (vis.length > 0) spawnSignalVisuals(xTrueNext, tNext, vis);
 
-    // Advance
+    // advance state
     app.truth = xTrueNext;
     app.t = tNext;
     app.k += 1;
 
     pushHistorySample();
-    updateReadouts(vis);
-    updateStationBoard(vis, vis);
+    updateReadouts(vis, app.t);
+    updateStationBoard(el.stationBoard, vis, vis);
+    updateStationBoard(el.stationBoardSmall, vis, vis);
   }
 
   // -----------------------------
   // Reset / initialization
   // -----------------------------
   function hardResetAll() {
-    app.dt = CONST.dt;
-    app.mu = CONST.mu;
-    app.Re = CONST.Re;
-    app.omega = CONST.omega;
+    app.crashed = false;
 
-    // steps
+    // dt adjustable
+    if (el.inpDt) {
+      const dtUI = parseFloat(el.inpDt.value);
+      if (Number.isFinite(dtUI)) app.dt = clamp(dtUI, 0.5, 120);
+    } else {
+      app.dt = 10;
+    }
+
     if (el.inpSteps) {
-      const kmax = parseInt(el.inpSteps.value || "1000000", 10);
-      app.Kmax = clamp(kmax, 500, 10_000_000);
+      const kUI = parseInt(el.inpSteps.value, 10);
+      if (Number.isFinite(kUI)) app.Kmax = clamp(kUI, 1000, 10_000_000);
+      else app.Kmax = 1_000_000;
     } else {
       app.Kmax = 1_000_000;
     }
 
-    // random seed every time (no user seed)
-    const seed = (Math.random() * 0xFFFFFFFF) >>> 0;
+    app.enableProcNoise = !!el.tglProcNoise?.checked;
+    app.enableMeasNoise = !!el.tglMeasNoise?.checked;
+
+    // random seed every load/reset (as requested)
+    const seed = (Math.floor(Math.random() * 1e9) >>> 0);
     app.rng = mulberry32(seed);
     app.randn = makeNormal(app.rng);
 
-    // set initial orbit from elements (with defaults if inputs absent)
-    const rpAlt = parseFloat(el.inpRpAlt?.value) || 350;
-    const ecc = clamp(parseFloat(el.inpEcc?.value) || 0.02, 0, 0.8);
-    const nuDeg = parseFloat(el.inpNuDeg?.value) || 0;
-    const argPerDeg = parseFloat(el.inpArgPerDeg?.value) || 0;
+    // reset thrust
+    app.u[0] = 0; app.u[1] = 0;
+    app.thrustKeys = { up:false, down:false, left:false, right:false };
+    app.thrustButtonsHeld = { up:false, down:false, left:false, right:false };
+    if (el.inpThrust) {
+      const v = parseFloat(el.inpThrust.value);
+      app.thrustMag = Number.isFinite(v) ? v : app.thrustMag;
+    }
 
-    const x0True = elementsToState2D(rpAlt, ecc, nuDeg, argPerDeg);
+    // noise defaults (the earlier version looked too “perfect”)
+    // These defaults are intentionally larger; users can dial them down.
+    app.QtrueAcc = buildQacc(parseFloat(el.inpQtrueAx?.value) || 5e-10, parseFloat(el.inpQtrueAy?.value) || 5e-10);
+    app.RtrueStn = buildRstn(parseFloat(el.inpRtrueRho?.value) || 0.05, parseFloat(el.inpRtrueRhod?.value) || 4e-4, parseFloat(el.inpRtruePhi?.value) || 2e-3);
 
-    // EKF initial uncertainty + small bias
-    const sigX0 = parseFloat(el.inpSigX0?.value) || 5;     // km
-    const sigV0 = parseFloat(el.inpSigV0?.value) || 0.02;  // km/s
+    // filter initial covariance
+    const sigX0 = parseFloat(el.inpSigX0?.value) || 1e-3;
+    const sigV0 = parseFloat(el.inpSigV0?.value) || 1e-4;
     const P0 = buildP0(sigX0, sigV0);
-    const x0Hat = new Float64Array([
-      x0True[0] + sigX0,
-      x0True[1] + sigV0,
-      x0True[2] + sigX0,
-      x0True[3] + sigV0
-    ]);
+
+    // initial orbit: simple circular-ish LEO
+    const alt = 500; // km
+    const r0 = app.Re + alt;
+    const vCirc = Math.sqrt(app.mu / r0);
+    const x0True = new Float64Array([r0, 0, 0, vCirc]);
+
+    // initial filter estimate offset
+    const x0Hat = new Float64Array([x0True[0] + sigX0, x0True[1] + sigV0, x0True[2] - sigX0, x0True[3] - sigV0]);
 
     app.ekf = new EKF(app.mu, app.Re, app.omega);
     app.ekf.setQR(
-      buildQacc(parseFloat(el.inpQkfAx?.value) || 1e-8, parseFloat(el.inpQkfAy?.value) || 1e-8),
-      buildRstn(parseFloat(el.inpRkfRho?.value) || 5, parseFloat(el.inpRkfRhod?.value) || 0.01, parseFloat(el.inpRkfPhi?.value) || 0.01)
+      buildQacc(parseFloat(el.inpQkfAx?.value) || 1e-10, parseFloat(el.inpQkfAy?.value) || 1e-10),
+      buildRstn(parseFloat(el.inpRkfRho?.value) || 0.05, parseFloat(el.inpRkfRhod?.value) || 4e-4, parseFloat(el.inpRkfPhi?.value) || 2e-3)
     );
     app.ekf.reset(x0Hat, P0);
 
-    // clear thrust
-    app.uHold.up = app.uHold.down = app.uHold.left = app.uHold.right = false;
-    updateThrustCommand();
-
-    // reset time
     app.t = 0;
     app.k = 0;
     app.truth = new Float64Array(x0True);
@@ -2198,45 +2204,54 @@
     // clear histories
     app.tHist = [];
     app.xTrueHist = [[],[],[],[]];
-    app.xHatHist  = [[],[],[],[]];
-    app.sigHist   = [[],[],[],[]];
-    app.errHist   = [[],[],[],[]];
+    app.xHatHist = [[],[],[],[]];
+    app.sigHist = [[],[],[],[]];
+    app.errHist = [[],[],[],[]];
     app.neesHist = [];
     app.nisHist = [];
     app.nisDfHist = [];
 
-    app.measByStation = Array.from({length:12}, () => ({ t:[], rho:[], rhod:[], phi:[] }));
-    app.predByStation = Array.from({length:12}, () => ({ t:[], rho:[], rhod:[], phi:[] }));
+    app.measT = [];
+    app.measRho = [];
+    app.measRhod = [];
+    app.measPhi = [];
+    app.measStId = [];
+
+    app.predT = [];
+    app.predRho = [];
+    app.predRhod = [];
+    app.predPhi = [];
+    app.predStId = [];
 
     app.pulses = [];
+    app.squiggles = [];
     app.plotDirty = true;
 
     app.cam.reset(app.Re);
-
-    // safe state seed
-    app.lastSafeState = null;
-    captureSafeState();
-
     setRunning(false);
+
     pushHistorySample();
-    updateReadouts([]);
-    updateStationBoard([], []);
+    updateReadouts([], 0);
+    updateStationBoard(el.stationBoard, [], []);
+    updateStationBoard(el.stationBoardSmall, [], []);
   }
 
   function resetEKFOnly() {
-    const sigX0 = parseFloat(el.inpSigX0?.value) || 5;
-    const sigV0 = parseFloat(el.inpSigV0?.value) || 0.02;
+    const sigX0 = parseFloat(el.inpSigX0?.value) || 1e-3;
+    const sigV0 = parseFloat(el.inpSigV0?.value) || 1e-4;
     const P0 = buildP0(sigX0, sigV0);
+
     const xTrue = app.truth;
-    const x0Hat = new Float64Array([xTrue[0] + sigX0, xTrue[1] + sigV0, xTrue[2] + sigX0, xTrue[3] + sigV0]);
+    const x0Hat = new Float64Array([xTrue[0] + sigX0, xTrue[1] + sigV0, xTrue[2] - sigX0, xTrue[3] - sigV0]);
 
     app.ekf.setQR(
-      buildQacc(parseFloat(el.inpQkfAx?.value) || 1e-8, parseFloat(el.inpQkfAy?.value) || 1e-8),
-      buildRstn(parseFloat(el.inpRkfRho?.value) || 5, parseFloat(el.inpRkfRhod?.value) || 0.01, parseFloat(el.inpRkfPhi?.value) || 0.01)
+      buildQacc(parseFloat(el.inpQkfAx?.value) || 1e-10, parseFloat(el.inpQkfAy?.value) || 1e-10),
+      buildRstn(parseFloat(el.inpRkfRho?.value) || 0.05, parseFloat(el.inpRkfRhod?.value) || 4e-4, parseFloat(el.inpRkfPhi?.value) || 2e-3)
     );
     app.ekf.reset(x0Hat, P0);
 
-    // reset EKF histories (keep truth history)
+    // keep truth history but re-align EKF histories with NaNs
+    const L = app.tHist.length;
     app.xHatHist = [[], [], [], []];
     app.sigHist = [[], [], [], []];
     app.errHist = [[], [], [], []];
@@ -2244,10 +2259,7 @@
     app.nisHist = [];
     app.nisDfHist = [];
 
-    app.predByStation = Array.from({length:12}, () => ({ t:[], rho:[], rhod:[], phi:[] }));
-
-    // align arrays with existing time history using NaNs
-    for (let idx = 0; idx < app.tHist.length; idx++) {
+    for (let i = 0; i < L; i++) {
       for (let j = 0; j < 4; j++) {
         app.xHatHist[j].push(NaN);
         app.sigHist[j].push(NaN);
@@ -2258,6 +2270,12 @@
       app.nisDfHist.push(NaN);
     }
 
+    app.predT = [];
+    app.predRho = [];
+    app.predRhod = [];
+    app.predPhi = [];
+    app.predStId = [];
+
     app.plotDirty = true;
   }
 
@@ -2265,8 +2283,9 @@
   // UI wiring
   // -----------------------------
   function setupSpeedButtons() {
-    const group = document.querySelectorAll(".chip[data-speed]");
-    group.forEach((btn) => btn.addEventListener("click", () => setSpeed(parseFloat(btn.dataset.speed))));
+    (el.spdChips || []).forEach(btn => {
+      btn.addEventListener("click", () => setSpeed(parseFloat(btn.dataset.speed)));
+    });
   }
 
   function setupControlButtons() {
@@ -2277,36 +2296,17 @@
     if (el.btnResetFilter) el.btnResetFilter.addEventListener("click", resetEKFOnly);
   }
 
-  function enforceNonTunableConstants() {
-    // If older inputs exist in the DOM, lock them.
-    const lockIds = ["inpDt","inpMu","inpRe","inpOmega","inpSeed"];
-    for (const id of lockIds) {
-      const node = $(`#${id}`);
-      if (!node) continue;
-      node.value = (id === "inpDt") ? String(CONST.dt)
-              : (id === "inpMu") ? String(CONST.mu)
-              : (id === "inpRe") ? String(CONST.Re)
-              : (id === "inpOmega") ? String(CONST.omega)
-              : "";
-      node.disabled = true;
-      node.setAttribute("aria-disabled", "true");
-    }
-
-    // Ensure steps defaults big if present
-    if (el.inpSteps && (!el.inpSteps.value || parseInt(el.inpSteps.value,10) < 1000000)) {
-      el.inpSteps.value = "1000000";
-    }
-  }
-
   // -----------------------------
   // Resize handling
   // -----------------------------
   function handleResize(force = false) {
-    app.orbitCtx  = setupCanvasHiDPI(el.orbitCanvas);
+    app.orbitCtx = setupCanvasHiDPI(el.orbitCanvas);
+
     app.ctxStates = setupCanvasHiDPI(el.plotStates);
     app.ctxErrors = setupCanvasHiDPI(el.plotErrors);
-    app.ctxMeas   = setupCanvasHiDPI(el.plotMeas);
-    app.ctxCons   = setupCanvasHiDPI(el.plotCons);
+    app.ctxMeas = setupCanvasHiDPI(el.plotMeas);
+    app.ctxTraj = setupCanvasHiDPI(el.plotTraj);
+    app.ctxCons = setupCanvasHiDPI(el.plotCons);
 
     app.plotDirty = true;
     if (force) {
@@ -2316,15 +2316,20 @@
   }
 
   // -----------------------------
-  // Animation loop (speed maps sim time to wall time)
+  // Animation loop with real-time speed mapping
   // -----------------------------
   let lastRAF = 0;
-  let simTimeAccumulator = 0;
+  let simTimeAccumulator = 0; // seconds of simulated time to process
 
   function tickRAF(ts) {
     if (!lastRAF) lastRAF = ts;
     const dtReal = (ts - lastRAF) / 1000;
     lastRAF = ts;
+
+    // continuous time display (even between discrete steps)
+    const tContinuous = app.running ? (app.t + simTimeAccumulator) : app.t;
+    const visNow = visibleStations(app.truth, app.t, app.Re, app.omega);
+    updateReadouts(visNow, tContinuous);
 
     if (app.running) {
       simTimeAccumulator += dtReal * app.speed;
@@ -2336,7 +2341,10 @@
         simTimeAccumulator -= app.dt;
         steps++;
       }
-      if (steps === maxStepsPerFrame) simTimeAccumulator = 0;
+      if (steps === maxStepsPerFrame) {
+        // avoid spiral-of-death; keep UI responsive
+        simTimeAccumulator = 0;
+      }
     } else {
       simTimeAccumulator = 0;
     }
@@ -2347,23 +2355,19 @@
   }
 
   // -----------------------------
-  // Init
+  // Bootstrap
   // -----------------------------
   function init() {
-    buildStationBoard();
+    // station boards (main + optional sidebar)
+    buildStationBoard(el.stationBoard);
+    buildStationBoard(el.stationBoardSmall);
+
+    setupTabs();
     setupSpeedButtons();
     setupControlButtons();
     setupOrbitPanZoom();
-    setupThrustUI();
-    enforceNonTunableConstants();
+    setupThrustControls();
 
-    // plot pan/zoom when paused
-    attachPlotPanZoom(el.plotMeas, app.viewMeas);
-    attachPlotPanZoom(el.plotCons, app.viewCons);
-    attachPlotPanZoom(el.plotStates, app.viewStates);
-    attachPlotPanZoom(el.plotErrors, app.viewErrors);
-
-    // default speed
     setSpeed(10);
 
     handleResize(true);
