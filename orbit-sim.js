@@ -1413,21 +1413,39 @@
     const mmy=computeMinMax([Ys]);
 
     let xmin=mmx.mn, xmax=mmx.mx, ymin=mmy.mn, ymax=mmy.mx;
-    const xr=xmax-xmin, yr=ymax-ymin;
-    const r=Math.max(xr,yr);
-    const xc=0.5*(xmin+xmax), yc=0.5*(ymin+ymax);
-    xmin=xc-0.55*r; xmax=xc+0.55*r; ymin=yc-0.55*r; ymax=yc+0.55*r;
+
+// Robust square extents (guard against bad/empty history)
+let xr = xmax - xmin;
+let yr = ymax - ymin;
+if (!Number.isFinite(xr) || !Number.isFinite(yr)) { xr = 1; yr = 1; }
+let r = Math.max(Math.abs(xr), Math.abs(yr));
+if (!Number.isFinite(r) || r < 1) {
+  // fall back to a sane window around current truth state (or Earth if that fails)
+  const cx = Number.isFinite(app.xTrue?.[0]) ? app.xTrue[0] : 0;
+  const cy = Number.isFinite(app.xTrue?.[2]) ? app.xTrue[2] : 0;
+  r = Math.max(R_E*2.2, Math.hypot(cx,cy)*1.4, 1);
+  xmin = cx - 0.5*r; xmax = cx + 0.5*r;
+  ymin = cy - 0.5*r; ymax = cy + 0.5*r;
+} else {
+  const xc = 0.5*(xmin + xmax);
+  const yc = 0.5*(ymin + ymax);
+  // include Earth comfortably in view
+  r = Math.max(r, R_E*2.2);
+  xmin = xc - 0.55*r; xmax = xc + 0.55*r;
+  ymin = yc - 0.55*r; ymax = yc + 0.55*r;
+}
+
 
     const ax=drawAxes(ctx,x0,y0,w,h,{title:"Inertial XY trajectory (km) — truth/est/ref + stations", xTicks:{min:xmin,max:xmax,fmt:(v)=>fmt(v,0)}, yTicks:{min:ymin,max:ymax,fmt:(v)=>fmt(v,0)}});
     const box={x:ax.plotX0,y:ax.plotY0,w:ax.plotW,h:ax.plotH};
-    const sx=(X)=>box.x+(X-xmin)/(xmax-xmin)*box.w;
-    const sy=(Y)=>box.y+box.h-(Y-ymin)/(ymax-ymin)*box.h;
+    const sx=(X)=>box.x+(X-xmin)/Math.max(1e-9, (xmax-xmin))*box.w;
+    const sy=(Y)=>box.y+box.h-(Y-ymin)/Math.max(1e-9, (ymax-ymin))*box.h;
 
     ctx.save();
     ctx.beginPath(); ctx.rect(box.x,box.y,box.w,box.h); ctx.clip();
 
     // earth
-    const RePx = (R_E/(xmax-xmin))*box.w;
+    const spanX = (xmax - xmin); const RePx = (R_E/Math.max(1e-9, Math.abs(spanX)))*box.w;
     ctx.beginPath(); ctx.arc(sx(0),sy(0),RePx,0,2*Math.PI);
     ctx.fillStyle="rgba(249,115,22,0.08)"; ctx.fill();
     ctx.strokeStyle="rgba(249,115,22,0.22)"; ctx.lineWidth=1.2; ctx.stroke();
