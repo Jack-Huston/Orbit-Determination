@@ -1,399 +1,292 @@
-<!-- index.html
-     Orbit Determination + EKF Demo (2D) — portfolio interactive
-     Notes:
-     - This page is intentionally self-contained (no external JS libs).
-     - The JS expects specific IDs/data attributes for tabs, plots, controls, and readouts.
-     - Keep the structure/IDs intact when editing layout.
--->
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Orbit Determination + EKF Simulator</title>
-    <link rel="stylesheet" href="orbit-sim.css" />
-  </head>
-  <body>
-    <!-- Top bar -->
-    <header class="topbar" role="banner">
-      <div class="topbar__inner">
-        <a class="backlink" href="../index.html" aria-label="Back to portfolio home"> ← Back </a>
-        <div class="brand">
-          <span class="brand__title">Orbit Determination</span>
-          <span class="brand__sub">Nonlinear truth + EKF (range / range-rate / angle)</span>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Orbit OD + EKF + Orbit Control (Client-side)</title>
+  <link rel="stylesheet" href="orbit-sim.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand__dot"></div>
+      <div class="brand__title">Orbit OD + EKF + Orbit Control</div>
+      <div class="brand__sub">2D two-body • rotating ground stations • range/ρ̇/φ • EKF • disturbance rejection</div>
+    </div>
+
+    <div class="hud">
+      <div class="hud__chip" id="chipRun"><span class="hud__label">Status</span><span class="hud__value" id="readoutRun">PAUSED</span></div>
+      <div class="hud__chip"><span class="hud__label">t</span><span class="hud__value" id="readoutTime">0.0 s</span></div>
+      <div class="hud__chip"><span class="hud__label">Δt</span><span class="hud__value" id="readoutDt">1.0 s</span></div>
+      <div class="hud__chip"><span class="hud__label">Visible</span><span class="hud__value" id="readoutVisible">0</span></div>
+      <div class="hud__chip"><span class="hud__label">Δv</span><span class="hud__value" id="readoutDV">0.0 m/s</span></div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn--primary" id="btnToggleRun">Run</button>
+      <button class="btn" id="btnStep">Step</button>
+      <button class="btn" id="btnReset">Reset</button>
+      <div class="seg">
+        <button class="btn btn--seg" data-speed="1">×1</button>
+        <button class="btn btn--seg" data-speed="5">×5</button>
+        <button class="btn btn--seg" data-speed="20">×20</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="card">
+        <div class="card__title">Simulation</div>
+        <div class="grid2">
+          <label class="field">
+            <span>Time step Δt (s)</span>
+            <input id="inpDt" type="number" min="0.1" max="60" step="0.1" value="5" />
+          </label>
+          <label class="field">
+            <span>Meas rate (every N steps)</span>
+            <input id="inpMeasEvery" type="number" min="1" max="60" step="1" value="1" />
+          </label>
         </div>
-        <div class="topbar__status" aria-live="polite">
-          <span id="statusRun" class="pill pill--idle">PAUSED</span>
-          <span id="statusTruthDist" class="pill pill--warn" hidden>TRUTH DISTURBANCE ON</span>
-          <span class="mono" id="hudWallClock">—</span>
+
+        <div class="row">
+          <button class="btn btn--ghost" id="btnZoomCraft">Zoom to craft</button>
+          <button class="btn btn--ghost" id="btnResetView">Reset view</button>
+        </div>
+
+        <div class="help">
+          Units: km, km/s, rad, s. Earth constants fixed (μ, R<sub>e</sub>, ω<sub>e</sub>).
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card__title">Desired orbit (reference)</div>
+        <div class="grid2">
+          <label class="field">
+            <span>Perigee altitude (km)</span>
+            <input id="inpTgtAlt" type="number" min="150" max="40000" step="10" value="300" />
+          </label>
+          <label class="field">
+            <span>Eccentricity e</span>
+            <input id="inpTgtE" type="number" min="0" max="0.6" step="0.01" value="0.00" />
+          </label>
+        </div>
+
+        <details class="adv">
+          <summary>Advanced</summary>
+          <div class="grid2">
+            <label class="field">
+              <span>Arg. of periapsis ω (deg)</span>
+              <input id="inpTgtW" type="number" min="-180" max="180" step="1" value="0" />
+            </label>
+            <label class="field">
+              <span>Reference phase align</span>
+              <select id="selPhase">
+                <option value="angle" selected>Match current inertial angle</option>
+                <option value="perigee">Start at perigee (θ=ω)</option>
+              </select>
+            </label>
+          </div>
+        </details>
+
+        <div class="row">
+          <button class="btn btn--primary" id="btnApplyTarget">Apply target orbit</button>
+          <button class="btn" id="btnHoldHere">Hold current orbit</button>
+        </div>
+
+        <div class="mini">
+          <div><span class="k">a</span> <span class="v" id="readoutA">—</span></div>
+          <div><span class="k">r<sub>a</sub></span> <span class="v" id="readoutRa">—</span></div>
+          <div><span class="k">T</span> <span class="v" id="readoutPeriod">—</span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card__title">Controller</div>
+
+        <div class="row">
+          <label class="toggle">
+            <input id="tglCtrl" type="checkbox" checked />
+            <span>Enable control</span>
+          </label>
+          <label class="toggle">
+            <input id="tglCtrlUseEKF" type="checkbox" checked />
+            <span>Use EKF estimate</span>
+          </label>
+        </div>
+
+        <div class="grid2">
+          <label class="field">
+            <span>Mode</span>
+            <select id="selCtrlMode">
+              <option value="track" selected>Nonlinear tracking (PI-D)</option>
+              <option value="lqr">Linear LQR (near-circular)</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Max accel (g)</span>
+            <input id="inpUMaxG" type="number" min="0.0001" max="0.05" step="0.0001" value="0.01" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Aggressiveness</span>
+          <input id="inpAgg" type="range" min="0.2" max="3" step="0.05" value="1" />
+        </label>
+
+        <details class="adv">
+          <summary>Gains</summary>
+          <div class="grid2">
+            <label class="field">
+              <span>Kp (1/s²)</span>
+              <input id="inpKp" type="number" step="1e-7" value="2e-6" />
+            </label>
+            <label class="field">
+              <span>Kd (1/s)</span>
+              <input id="inpKd" type="number" step="1e-4" value="8e-4" />
+            </label>
+            <label class="field">
+              <span>Ki (1/s³)</span>
+              <input id="inpKi" type="number" step="1e-10" value="2e-9" />
+            </label>
+            <label class="field">
+              <span>Integral clamp (km·s)</span>
+              <input id="inpIClamp" type="number" step="10" value="5000" />
+            </label>
+          </div>
+
+          <div class="help">
+            Tracking control law (inertial):<br/>
+            <code>u = a_ref − a_hat + Kp·(r_ref−r_hat) + Kd·(v_ref−v_hat) + Ki·∫(r_ref−r_hat)dt</code>
+          </div>
+        </details>
+
+        <div class="callout callout--warn" id="calloutCtrlSat" hidden>
+          Control saturated at max accel.
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card__title">Disturbances & noise</div>
+
+        <div class="row">
+          <label class="toggle">
+            <input id="tglTruthDist" type="checkbox" />
+            <span>Truth accel disturbance</span>
+          </label>
+          <span class="pill pill--warn" id="pillDist" hidden>Truth random-walk</span>
+        </div>
+
+        <div class="grid2">
+          <label class="field">
+            <span>Model</span>
+            <select id="selDistModel">
+              <option value="gm" selected>Gauss–Markov</option>
+              <option value="white">White</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>σ<sub>a</sub> (m/s²)</span>
+            <input id="inpDistSigma" type="number" step="0.00001" value="0.00020" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span>GM correlation τ (s)</span>
+          <input id="inpDistTau" type="number" min="10" max="50000" step="10" value="600" />
+        </label>
+
+        <hr class="sep" />
+
+        <div class="row">
+          <label class="toggle">
+            <input id="tglMeasNoise" type="checkbox" checked />
+            <span>Measurement noise</span>
+          </label>
+        </div>
+
+        <div class="grid3">
+          <label class="field">
+            <span>σ<sub>ρ</sub> (km)</span>
+            <input id="inpSigRho" type="number" step="0.01" value="0.20" />
+          </label>
+          <label class="field">
+            <span>σ<sub>ρ̇</sub> (km/s)</span>
+            <input id="inpSigRhod" type="number" step="0.0001" value="0.0020" />
+          </label>
+          <label class="field">
+            <span>σ<sub>φ</sub> (rad)</span>
+            <input id="inpSigPhi" type="number" step="0.0001" value="0.0020" />
+          </label>
+        </div>
+
+        <details class="adv">
+          <summary>Filter tuning</summary>
+          <div class="grid2">
+            <label class="field">
+              <span>EKF accel σ<sub>Q</sub> (m/s²)</span>
+              <input id="inpQsigma" type="number" step="0.00001" value="0.00005" />
+            </label>
+            <label class="field">
+              <span>Consistency α</span>
+              <input id="inpAlpha" type="number" min="0.01" max="0.2" step="0.01" value="0.05" />
+            </label>
+          </div>
+        </details>
+      </section>
+
+      <section class="card">
+        <div class="card__title">Ground stations</div>
+        <div class="stationBoard" id="stationBoard"></div>
+        <div class="help">When a station is measuring, the link and “data squiggle” use that station’s color.</div>
+      </section>
+    </aside>
+
+    <section class="main">
+      <div class="vizCard">
+        <div class="vizTop">
+          <div class="vizTop__left">
+            <div class="legend">
+              <span class="sw sw--truth"></span> Truth
+              <span class="sw sw--est"></span> EKF
+              <span class="sw sw--ref"></span> Reference
+            </div>
+          </div>
+          <div class="vizTop__right">
+            <div class="small" id="readoutOrbit">—</div>
+          </div>
+        </div>
+
+        <div class="orbitWrap">
+          <canvas id="orbitCanvas"></canvas>
+          <div class="overlay overlay--tl" id="overlayWarn" hidden>Disturbances enabled</div>
         </div>
       </div>
-    </header>
-    <!-- Hero -->
-    <section class="hero" aria-label="Summary">
-      <div class="hero__inner">
-        <div class="hero__left">
-          <div class="badge" aria-label="Project badge">
-            <span>GN&amp;C Demo</span>
-            <span class="mono">client-side</span>
-          </div>
-          <h1 class="hero__title">2D Orbit Simulator + EKF</h1>
-          <p class="hero__text"> A clean, in-browser orbit determination demo with a nonlinear truth model, rotating ground stations, noisy measurements, and an Extended Kalman Filter estimating <span class="mono">[X, Xdot, Y, Ydot]</span>. Units: km, km/s, rad, s. Earth constants are fixed. </p>
-          <p class="hero__text"> Live plots show state estimates, errors, measurement residuals, and filter consistency tests (NEES/NIS). </p>
-          <div class="hero__cta">
-            <button id="btnToggleRun" class="btn btn--primary" type="button">Run</button>
-            <button id="btnStep" class="btn btn--ghost" type="button">Step</button>
-            <button id="btnReset" class="btn btn--ghost" type="button">Reset</button>
-          </div>
-          <div class="chips" aria-label="Simulation speed controls">
-            <button id="spd1" class="chip is-active" type="button" data-speed="1">1×</button>
-            <button id="spd10" class="chip" type="button" data-speed="10">10×</button>
-            <button id="spd100" class="chip" type="button" data-speed="100">100×</button>
-            <button id="spd1000" class="chip" type="button" data-speed="1000">1000×</button>
-          </div>
-        </div>
-        <div class="hero__right" aria-label="Quick stats">
-          <div class="stats">
-            <div class="stat">
-              <div class="stat__label">Sim time</div>
-              <div class="stat__value mono" id="readoutTime">0.0 s</div>
-              <div class="stat__hint mono" id="readoutTimeFine">t = 0.00 s</div>
-            </div>
-            <div class="stat">
-              <div class="stat__label">Steps</div>
-              <div class="stat__value mono" id="readoutStep">0</div>
-              <div class="stat__hint">Fixed Δt integration</div>
-            </div>
-            <div class="stat">
-              <div class="stat__label">Visible stations</div>
-              <div class="stat__value mono" id="readoutVisible">0</div>
-              <div class="stat__hint">Horizon check</div>
-            </div>
-          </div>
-        </div>
+
+      <div class="tabs">
+        <button class="tab is-active" data-tab="states">States</button>
+        <button class="tab" data-tab="errors">Errors</button>
+        <button class="tab" data-tab="meas">Measurements</button>
+        <button class="tab" data-tab="traj">Trajectory</button>
+        <button class="tab" data-tab="cons">NEES / NIS</button>
+        <button class="tab" data-tab="ctrl">Control</button>
       </div>
+
+      <div class="panes">
+        <div class="pane is-active" data-pane="states"><canvas id="plotStates"></canvas></div>
+        <div class="pane" data-pane="errors"><canvas id="plotErrors"></canvas></div>
+        <div class="pane" data-pane="meas"><canvas id="plotMeas"></canvas></div>
+        <div class="pane" data-pane="traj"><canvas id="plotTraj"></canvas></div>
+        <div class="pane" data-pane="cons"><canvas id="plotCons"></canvas></div>
+        <div class="pane" data-pane="ctrl"><canvas id="plotCtrl"></canvas></div>
+      </div>
+
+      <footer class="footer">
+        Tip: Pan/zoom the orbit view any time. Plot pan/zoom is enabled only when paused.
+      </footer>
     </section>
-    <!-- Main content -->
-    <main class="main" role="main">
-      <div class="layout">
-        <!-- Left: settings -->
-        <aside class="panel panel--settings" aria-label="Settings and controls">
-          <div class="panel__header">
-            <h2 class="panel__title">Controls</h2>
-            <p class="panel__subtitle">Adjust Δt and noise assumptions live. Keep changes small for stable EKF behavior.</p>
-          </div>
-          <div class="panel__body">
-            <!-- Simulation -->
-            <section class="card" aria-label="Simulation settings">
-              <div class="card__head">
-                <h3 class="card__title">Simulation</h3>
-              </div>
-              <div class="grid2">
-                <label class="field">
-                  <span class="field__label">Δt (s)</span>
-                  <input id="inpDt" class="field__input" type="number" min="0.01" step="0.01" value="1" />
-                  <span class="field__hint">Truth RK4 step and filter cadence.</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">Max steps</span>
-                  <input id="inpSteps" class="field__input" type="number" min="1000" step="1000" value="1000000" />
-                  <span class="field__hint">Stops automatically at this count.</span>
-                </label>
-              </div>
-              <div class="divider divider--thin"></div>
-              <!-- Initial condition in orbital elements (2D) -->
-              <div class="subhead">Initial orbit (2D)</div>
-              <div class="grid2">
-                <label class="field">
-                  <span class="field__label">a (km)</span>
-                  <input id="inpA" class="field__input" type="number" min="6500" step="1" value="7000" />
-                  <span class="field__hint">Semi-major axis.</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">e</span>
-                  <input id="inpE" class="field__input" type="number" min="0" max="0.95" step="0.001" value="0.01" />
-                  <span class="field__hint">Eccentricity.</span>
-                </label>
-              </div>
-              <div class="grid2">
-                <label class="field">
-                  <span class="field__label">ν0 (deg)</span>
-                  <input id="inpNu" class="field__input" type="number" step="1" value="0" />
-                  <span class="field__hint">True anomaly at t=0.</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">ω (deg)</span>
-                  <input id="inpArgp" class="field__input" type="number" step="1" value="0" />
-                  <span class="field__hint">Argument of periapsis (2D).</span>
-                </label>
-              </div>
-              <div class="grid2">
-                <label class="field">
-                  <span class="field__label">EKF init pos σ (km)</span>
-                  <input id="inpP0Pos" class="field__input" type="number" min="0.001" step="0.01" value="1" />
-                  <span class="field__hint">Initial position uncertainty.</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">EKF init vel σ (km/s)</span>
-                  <input id="inpP0Vel" class="field__input" type="number" min="1e-6" step="0.0001" value="0.001" />
-                  <span class="field__hint">Initial velocity uncertainty.</span>
-                </label>
-              </div>
-              <div class="callout" id="icValidity" aria-live="polite">
-                <div class="callout__dot"></div>
-                <div class="callout__text"> IC status: <span class="mono" id="icValidityText">—</span>
-                </div>
-              </div>
-            </section>
-            <!-- Disturbances + sensor noise -->
-            <section class="card" aria-label="Disturbances and sensor noise">
-              <div class="card__head">
-                <h3 class="card__title">Disturbances &amp; sensors</h3>
-              </div>
-              <div class="grid2">
-                <label class="toggle">
-                  <input id="tglProcNoise" type="checkbox" />
-                  <span class="toggle__pill"></span>
-                  <span class="toggle__text"> Truth disturbance <span class="toggle__hint mono">a(t) injected into RK4</span>
-                  </span>
-                </label>
-                <label class="toggle">
-                  <input id="tglMeasNoise" type="checkbox" checked />
-                  <span class="toggle__pill"></span>
-                  <span class="toggle__text"> Sensor noise <span class="toggle__hint mono">y = h(x) + v</span>
-                  </span>
-                </label>
-              </div>
-              <div class="callout" id="truthDistCallout" aria-live="polite" hidden>
-                <div class="callout__dot"></div>
-                <div class="callout__text"> Truth disturbance is ON — the truth orbit will drift (stochastic acceleration is integrated over time). </div>
-              </div>
-              <div class="divider divider--thin"></div>
-              <div class="subhead">Truth disturbance (optional)</div>
-              <label class="field">
-                <span class="field__label">Model</span>
-                <select id="selProcModel" class="field__input">
-                  <option value="gm" selected>Gauss–Markov accel bias (recommended)</option>
-                  <option value="white">White accel noise (random walk)</option>
-                </select>
-                <span class="field__hint">Gauss–Markov stays bounded; white noise produces unbounded random-walk drift.</span>
-              </label>
-              <div class="grid2">
-                <label class="field">
-                  <span class="field__label">σa,truth (km/s²)</span>
-                  <input id="inpProcSigma" class="field__input" type="number" min="0" step="1e-10" value="5e-8" />
-                  <span class="field__hint">1σ magnitude per axis (used for both X and Y).</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">τ (s)</span>
-                  <input id="inpProcTau" class="field__input" type="number" min="1" step="10" value="300" />
-                  <span class="field__hint">Correlation time (Gauss–Markov only).</span>
-                </label>
-              </div>
-              <div class="divider divider--thin"></div>
-              <div class="subhead">Sensor noise (optional)</div>
-              <div class="grid3">
-                <label class="field">
-                  <span class="field__label">σρ (km)</span>
-                  <input id="inpRtrueRho" class="field__input" type="number" min="0" step="0.01" value="0.2" />
-                  <span class="field__hint">Range std dev.</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">σρ̇ (km/s)</span>
-                  <input id="inpRtrueRhod" class="field__input" type="number" min="0" step="0.0001" value="0.002" />
-                  <span class="field__hint">Range-rate std dev.</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">σφ (rad)</span>
-                  <input id="inpRtruePhi" class="field__input" type="number" min="0" step="0.0001" value="0.003" />
-                  <span class="field__hint">Angle std dev.</span>
-                </label>
-              </div>
-            </section>
-            <!-- EKF assumptions -->
-            <section class="card" aria-label="EKF assumptions">
-              <div class="card__head">
-                <h3 class="card__title">Filter</h3>
-              </div>
-              <div class="grid2">
-                <label class="field">
-                  <span class="field__label">Process model</span>
-                  <select id="selProc" class="field__input">
-                    <option value="2body" selected>Two-body (μ fixed)</option>
-                    <option value="2bodyThrust">Two-body + known thrust u(t)</option>
-                  </select>
-                  <span class="field__hint">EKF uses this as f(x,u).</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">α (NEES/NIS)</span>
-                  <input id="inpAlpha" class="field__input" type="number" min="0.001" max="0.2" step="0.001" value="0.05" />
-                  <span class="field__hint">χ² bounds level for NEES/NIS.</span>
-                </label>
-              </div>
-              <div class="grid2">
-                <label class="field">
-                  <span class="field__label">Numerical Jacobian ε</span>
-                  <input id="inpEps" class="field__input" type="number" min="1e-10" step="1e-8" value="1e-6" />
-                  <span class="field__hint">Finite-diff step (km / km/s units).</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">Meas gating</span>
-                  <select id="selGate" class="field__input">
-                    <option value="none" selected>None</option>
-                    <option value="nis">NIS gate (reject outliers)</option>
-                  </select>
-                  <span class="field__hint">Optional measurement rejection.</span>
-                </label>
-              </div>
-              <div class="divider divider--thin"></div>
-              <div class="subhead">Crash behavior</div>
-              <label class="field">
-                <span class="field__label">If r &lt; Re</span>
-                <select id="selCrash" class="field__input">
-                  <option value="reset" selected>Auto reset</option>
-                  <option value="freeze">Freeze sim</option>
-                </select>
-                <span class="field__hint">Guardrail if truth or estimate intersects Earth.</span>
-              </label>
-            </section>
-            <!-- Manual thrust -->
-            <section class="card" aria-label="Manual thrust">
-              <div class="card__head">
-                <h3 class="card__title">Manual thrust (optional)</h3>
-              </div>
-              <div class="thruster__grid" aria-label="Thrust buttons">
-                <div></div>
-                <button id="btnThUp" class="thruster__btn" type="button" aria-label="Thrust +Y">▲</button>
-                <div class="thruster__readouts">
-                  <div>ax: <span id="thrAx">0.0000</span> km/s² </div>
-                  <div>ay: <span id="thrAy">0.0000</span> km/s² </div>
-                </div>
-                <button id="btnThRight" class="thruster__btn" type="button" aria-label="Thrust +X">►</button>
-                <div class="thruster__center">
-                  <button id="btnThLeft" class="thruster__btn" type="button" aria-label="Thrust -X">◄</button>
-                  <button id="btnThDown" class="thruster__btn" type="button" aria-label="Thrust -Y">▼</button>
-                  <button id="btnThZero" class="thruster__btn thruster__btn--ghost" type="button">ZERO</button>
-                </div>
-                <div></div>
-              </div>
-              <div class="pill pill--warn mono" id="thrustStatus">THRUST: 0</div>
-              <div class="grid2">
-                <label class="field">
-                  <span class="field__label">Thrust magnitude (km/s²)</span>
-                  <input id="inpThrust" class="field__input" type="number" min="0" step="0.0001" value="0.0005" />
-                  <span class="field__hint">Acceleration applied while a thruster is held.</span>
-                </label>
-                <div class="field field--note">
-                  <span class="field__label">Keyboard</span>
-                  <div class="field__hint"> Use <span class="mono">← ↑ → ↓</span> to thrust, <span class="mono">Space</span> to zero. </div>
-                </div>
-              </div>
-              <!-- Hidden but used by JS (kept for backward compatibility) -->
-              <input id="inpUx" type="hidden" value="0" />
-              <input id="inpUy" type="hidden" value="0" />
-            </section>
-            <!-- Hidden constants (Earth-only; JS reads them, but users don't edit) -->
-            <input id="inpMu" type="hidden" value="398600" />
-            <input id="inpRe" type="hidden" value="6378" />
-            <input id="inpOmega" type="hidden" value="0.000072722052" />
-            <input id="inpSeed" type="hidden" value="0" />
-          </div>
-        </aside>
-        <!-- Right: visuals -->
-        <section class="panel panel--viz" aria-label="Visualization panels">
-          <!-- Orbit view -->
-          <div class="orbitbox" aria-label="Orbit view">
-            <div class="orbitbox__head">
-              <div class="orbitbox__title"> Orbit view <span class="mono orbitbox__subtitle">(truth vs EKF)</span>
-              </div>
-              <div class="orbitbox__actions" aria-label="Orbit view actions">
-                <div class="btnrow">
-                  <button id="btnZoomCraft" class="btn btn--tiny" type="button">Zoom to craft</button>
-                  <button id="btnCenterView" class="btn btn--tiny" type="button">Center Earth</button>
-                  <button id="btnResetView" class="btn btn--tiny" type="button">Reset view</button>
-                </div>
-              </div>
-            </div>
-            <div class="orbitbox__canvaswrap">
-              <canvas id="orbitCanvas" class="canvas canvas--orbit" aria-label="Orbit canvas"></canvas>
-            </div>
-            <!-- Small station strip (12) -->
-            <div class="stationstrip" aria-label="Ground station status strip">
-              <div class="stationstrip__title">Ground stations</div>
-              <div id="stationBoard" class="stationstrip__board" aria-label="Station tiles"></div>
-            </div>
-          </div>
-          <!-- Plots + tabs -->
-          <div class="plots" aria-label="Plots">
-            <div class="plots__head">
-              <div class="plots__title"> Plots <span class="mono plots__subtitle">Drag/scroll to pan/zoom (paused only)</span>
-              </div>
-              <div class="tabs" role="tablist" aria-label="Plot tabs">
-                <button class="tab is-active" type="button" role="tab" aria-selected="true" data-tab="states" aria-controls="pane-states">States</button>
-                <button class="tab" type="button" role="tab" aria-selected="false" data-tab="errors" aria-controls="pane-errors">Errors</button>
-                <button class="tab" type="button" role="tab" aria-selected="false" data-tab="meas" aria-controls="pane-meas">Measurements</button>
-                <button class="tab" type="button" role="tab" aria-selected="false" data-tab="nees" aria-controls="pane-nees">NEES/NIS</button>
-              </div>
-            </div>
-            <div class="panes">
-              <div id="pane-states" class="pane is-active" data-pane="states">
-                <div class="pane__head">
-                  <div class="pane__title">States</div>
-                  <div class="pane__hint">Includes ±2σ bands (EKF covariance). Pan/zoom enabled when paused.</div>
-                </div>
-                <div class="pane__canvaswrap">
-                  <canvas id="plotStates" class="canvas canvas--plot" aria-label="States plot"></canvas>
-                </div>
-              </div>
-              <div id="pane-errors" class="pane" data-pane="errors">
-                <div class="pane__head">
-                  <div class="pane__title">Errors</div>
-                  <div class="pane__hint">Error with ±2σ bounds; used to diagnose filter tuning. Pan/zoom enabled when paused.</div>
-                </div>
-                <div class="pane__canvaswrap">
-                  <canvas id="plotErrors" class="canvas canvas--plot" aria-label="Errors plot"></canvas>
-                </div>
-              </div>
-              <div id="pane-meas" class="pane" data-pane="meas">
-                <div class="pane__head">
-                  <div class="pane__title">Measurements</div>
-                  <div class="pane__hint">Measured vs predicted points; colored by station ID. Pan/zoom enabled when paused.</div>
-                </div>
-                <div class="pane__measgrid">
-                  <div class="pane__canvaswrap">
-                    <canvas id="plotMeas" class="canvas canvas--plot" aria-label="Measurements plot"></canvas>
-                  </div>
-                  <div class="measboard" aria-label="Measurement stations panel">
-                    <div class="measboard__title">Stations</div>
-                    <div id="stationBoardSmall" class="stationgrid" aria-label="Station tiles in measurements panel">
-                      <!-- JS populates tiles -->
-                    </div>
-                    <div class="measboard__hint"> Tiles pulse when a station is measuring. Colors match plot points and orbit signal links. </div>
-                  </div>
-                </div>
-              </div>
-              <div id="pane-nees" class="pane" data-pane="nees">
-                <div class="pane__head">
-                  <div class="pane__title">NEES / NIS</div>
-                  <div class="pane__hint">NEES and NIS with χ² bounds for the selected α. Pan/zoom enabled when paused.</div>
-                </div>
-                <div class="pane__canvaswrap">
-                  <canvas id="plotNEES" class="canvas canvas--plot" aria-label="NEES / NIS plot"></canvas>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-    </main>
-    <footer class="footer" role="contentinfo">
-      <div class="footer__inner">
-        <div class="footer__left">
-          <span class="mono">2D orbit sim</span> · RK4 truth · EKF estimation · DSN-style stations
-        </div>
-        <div class="footer__right mono"> No external libraries · Client-side only </div>
-      </div>
-    </footer>
-    <script src="orbit-sim.js"></script>undefined
-  </body>undefined
+  </main>
+
+  <script src="orbit-sim.js"></script>
+</body>
 </html>
