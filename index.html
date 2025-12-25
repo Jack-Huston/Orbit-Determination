@@ -1,297 +1,411 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Orbit Control + EKF Demo (Client-side)</title>
-  <link rel="stylesheet" href="orbit-sim.css" />
-</head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand__dot"></div>
-      <div class="brand__title">Orbit Control + EKF</div>
-      <div class="brand__sub">2D two-body • stations • range/range-rate/angle • disturbance rejection</div>
-    </div>
-
-    <div class="hud">
-      <div class="hud__chip"><span class="hud__label">State</span><span class="hud__value" id="readoutRun">PAUSED</span></div>
-      <div class="hud__chip"><span class="hud__label">t</span><span class="hud__value" id="readoutTime">0.0 s</span></div>
-      <div class="hud__chip"><span class="hud__label">Δt</span><span class="hud__value" id="readoutDt">1.0 s</span></div>
-      <div class="hud__chip"><span class="hud__label">Visible</span><span class="hud__value" id="readoutVisible">0</span></div>
-      <div class="hud__chip"><span class="hud__label">Δv</span><span class="hud__value" id="readoutDV">0.0 m/s</span></div>
-    </div>
-
-    <div class="actions">
-      <button class="btn btn--primary" id="btnToggleRun" type="button">Run</button>
-      <button class="btn" id="btnStep" type="button">Step</button>
-      <button class="btn" id="btnReset" type="button">Reset</button>
-      <div class="seg" role="group" aria-label="Speed">
-        <button class="btn btn--seg is-active" data-speed="1" type="button">×1</button>
-        <button class="btn btn--seg" data-speed="5" type="button">×5</button>
-        <button class="btn btn--seg" data-speed="20" type="button">×20</button>
-      </div>
-    </div>
-  </header>
-
-  <div class="shell">
-    <section class="stage">
-      <div class="stageCard">
-        <div class="stageTop">
-          <div class="stageTop__left">
-            <div class="pill" id="pillDist" hidden>
-              <span class="pill__dot"></span>
-              Disturbance ON (truth random-walk)
-            </div>
-            <div class="overlayWarn" id="overlayWarn" hidden>
-              Disturbance enabled: truth will random-walk.<br/>
-              Use controller to reject it.
-            </div>
-          </div>
-          <div class="stageTop__right">
-            <button class="btn btn--ghost" id="btnZoomCraft" type="button">Zoom to craft</button>
-            <button class="btn btn--ghost" id="btnResetView" type="button">Reset view</button>
-          </div>
-        </div>
-
-        <div class="orbitWrap">
-          <canvas id="orbitCanvas"></canvas>
-        </div>
-
-        <div class="stageBottom">
-          <div class="orbitReadouts">
-            <div class="mini">
-              <div class="mini__k">a</div><div class="mini__v" id="readoutA">—</div>
-            </div>
-            <div class="mini">
-              <div class="mini__k">r<sub>a</sub></div><div class="mini__v" id="readoutRa">—</div>
-            </div>
-            <div class="mini">
-              <div class="mini__k">T</div><div class="mini__v" id="readoutPeriod">—</div>
-            </div>
-            <div class="mini mini--wide">
-              <div class="mini__k">Target</div><div class="mini__v" id="readoutOrbit">—</div>
-            </div>
-          </div>
-
-          <div class="stationBoard" id="stationBoard" aria-label="Ground stations"></div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>2D Orbit + EKF + Linear Control Demo</title>
+    <link rel="stylesheet" href="orbit-sim.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div class="brand-text">
+          <div class="brand-title">Orbit Nav Demo</div>
+          <div class="brand-sub">2D ECI · RK4 truth · EKF · 12 rotating ground stations · linear control</div>
         </div>
       </div>
-    </section>
+      <div class="statusline">
+        <div class="pill"><span class="dot dot-truth"></span>Truth</div>
+        <div class="pill"><span class="dot dot-est"></span>EKF</div>
+        <div class="pill"><span class="dot dot-meas"></span>Meas</div>
+        <div class="pill"><span class="dot dot-ctrl"></span>Control</div>
+        <div class="pill warn" id="pillDisturb">Disturbance OFF</div>
+        <div class="pill warn" id="pillSat">Saturation OK</div>
+        <div class="pill warn" id="pillImpact" style="display:none;">IMPACT</div>
+      </div>
+    </header>
 
-    <aside class="controlPane">
-      <div class="controlStack">
-        <details class="accordion" open>
-          <summary>Simulation</summary>
-          <div class="cardBody">
-            <div class="grid2">
-              <label class="field">
-                <span>Time step Δt (s)</span>
-                <input id="inpDt" type="number" min="0.1" max="60" step="0.1" value="1" />
-              </label>
-              <label class="field">
-                <span>Meas rate (every N steps)</span>
-                <input id="inpMeasEvery" type="number" min="1" max="60" step="1" value="1" />
-              </label>
-            </div>
-            <div class="help">Units: km, km/s, rad, s. Earth constants fixed (μ, R<sub>e</sub>, ω<sub>e</sub>).</div>
+    <main class="layout">
+      <section class="card orbit-card">
+        <div class="card-head">
+          <div class="card-title">Orbit View</div>
+          <div class="card-actions">
+            <button class="btn" id="btnResetView" type="button">Reset View</button>
+            <button class="btn" id="btnZoomCraft" type="button">Zoom to Craft</button>
           </div>
-        </details>
+        </div>
 
-        <details class="accordion" open>
-          <summary>Desired orbit</summary>
-          <div class="cardBody">
-            <div class="grid2">
+        <div class="orbit-wrap">
+          <canvas id="orbitCanvas" aria-label="Orbit view canvas"></canvas>
+
+          <div class="hud">
+            <div class="hud-row">
+              <div class="hud-item">
+                <div class="hud-label">t (s)</div>
+                <div class="hud-value" id="hudTime">0.00</div>
+              </div>
+              <div class="hud-item">
+                <div class="hud-label">step</div>
+                <div class="hud-value" id="hudStep">0</div>
+              </div>
+              <div class="hud-item">
+                <div class="hud-label">Δt (s)</div>
+                <div class="hud-value" id="hudDt">10</div>
+              </div>
+              <div class="hud-item">
+                <div class="hud-label">visible</div>
+                <div class="hud-value" id="hudVisible">0</div>
+              </div>
+            </div>
+            <div class="hud-row">
+              <div class="hud-item">
+                <div class="hud-label">mode</div>
+                <div class="hud-value" id="hudMode">Paused</div>
+              </div>
+              <div class="hud-item">
+                <div class="hud-label">speed</div>
+                <div class="hud-value" id="hudSpeed">10×</div>
+              </div>
+              <div class="hud-item">
+                <div class="hud-label">NEES</div>
+                <div class="hud-value" id="hudNees">–</div>
+              </div>
+              <div class="hud-item">
+                <div class="hud-label">NIS</div>
+                <div class="hud-value" id="hudNis">–</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Added: relative position + covariance ellipse panel (new, additive only) -->
+        <div class="ellipse-wrap">
+          <div class="ellipse-head">
+            <div class="ellipse-title">Relative position &amp; covariance</div>
+            <div class="ellipse-scale" id="ellipseScale">–</div>
+          </div>
+          <canvas id="ellipseCanvas" aria-label="Relative position and covariance ellipse plot"></canvas>
+          <div class="micro" id="ellipseHelp">
+            Centered at the EKF estimate (0,0). The dot shows the truth offset (truth − estimate) at the most recent measurement update.
+            Ellipses show 1σ, 2σ, and 3σ position uncertainty from the EKF covariance.
+          </div>
+        </div>
+
+        <div class="hint"> Pan: drag · Zoom: scroll · Space: Run/Pause · R: Reset · S: Step </div>
+      </section>
+
+      <aside class="card controls-card">
+        <div class="card-head">
+          <div class="card-title">Simulation / Controls</div>
+
+          <!-- Moved (layout only): speedbar into the card header (IDs unchanged) -->
+          <div class="card-actions">
+            <div class="speedbar" aria-label="simulation speed">
+              <button class="btn speedbtn" data-speed="1" type="button">1×</button>
+              <button class="btn speedbtn active" data-speed="10" type="button">10×</button>
+              <button class="btn speedbtn" data-speed="100" type="button">100×</button>
+              <button class="btn speedbtn" data-speed="1000" type="button">1000×</button>
+              <button class="btn speedbtn" data-speed="10000" type="button">10000×</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <div class="row">
+            <button class="btn primary" id="btnRunPause" type="button">Run</button>
+            <button class="btn" id="btnStep" type="button">Step</button>
+            <button class="btn danger" id="btnReset" type="button">Reset</button>
+          </div>
+
+          <div class="section orbit-ic-section">
+            <div class="section-title">Initial condition / desired orbit</div>
+            <div class="grid">
               <label class="field">
-                <span>Perigee altitude h<sub>p</sub> (km)</span>
-                <input id="inpTgtAlt" type="number" min="150" max="20000" step="10" value="500" />
+                <span>Perigee alt (km)</span>
+                <input id="inpPerigeeAlt" type="number" min="150" max="2000" step="10" value="300" />
+                <div class="bounds">min 150 · max 2000</div>
               </label>
+
               <label class="field">
-                <span>Eccentricity e</span>
-                <input id="inpTgtE" type="number" min="0" max="0.7" step="0.01" value="0.0" />
+                <span>Eccentricity</span>
+                <input id="inpEcc" type="number" min="0" max="0.6" step="0.001" value="0.0" />
+                <div class="bounds">Controller requires e = 0</div>
               </label>
             </div>
-            <div class="grid2">
+
+            <div class="micro">
+              Perigee radius r<sub>p</sub> = R<sub>E</sub> + altitude. Eccentricity sets an elliptical orbit (initialized at perigee).
+            </div>
+          </div>
+
+          <div class="grid">
+            <label class="field">
+              <span>Δt (s)</span>
+              <input id="inpDt" type="number" min="1" max="120" step="1" value="10" />
+              <div class="bounds">min 1 · max 120</div>
+            </label>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Measurement noise (per station)</div>
+            <div class="grid">
               <label class="field">
-                <span>Argument of periapsis ω (deg)</span>
-                <input id="inpTgtW" type="number" min="-180" max="180" step="1" value="0" />
-              </label>
-              <label class="field">
-                <span>Phase align</span>
-                <select id="selPhase">
-                  <option value="hold">Hold current phase</option>
-                  <option value="match">Match craft phase</option>
-                  <option value="peri">Start at periapsis</option>
+                <span>Measurement noise</span>
+                <select id="selMeasNoise">
+                  <option value="on" selected>On</option>
+                  <option value="off">Off</option>
                 </select>
               </label>
-            </div>
-            <div class="row">
-              <button class="btn btn--primary" id="btnApplyTarget" type="button">Apply target</button>
-              <button class="btn" id="btnHoldHere" type="button">Hold here</button>
-            </div>
-            <div class="help">Bounds prevent nonsense (re-entry, hyperbolic). Target is a reference orbit drawn in the view.</div>
-          </div>
-        </details>
-
-        <details class="accordion" open>
-          <summary>Controller</summary>
-          <div class="cardBody">
-            <div class="row row--tight">
-              <label class="toggle">
-                <input id="tglCtrl" type="checkbox" checked />
-                <span>Enable control</span>
-              </label>
-              <label class="toggle">
-                <input id="tglCtrlUseEKF" type="checkbox" checked />
-                <span>Use EKF state</span>
-              </label>
-            </div>
-
-            <div class="grid2">
-              <label class="field">
-                <span>Mode</span>
-                <select id="selCtrlMode">
-                  <option value="nonlinear">Nonlinear tracking (PI-D)</option>
-                  <option value="lqr">Linear LQR (near-circular)</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Max accel (g)</span>
-                <input id="inpUMaxG" type="number" min="0.0001" max="0.05" step="0.0001" value="0.005" />
-              </label>
-            </div>
-
-            <div class="grid2">
-              <label class="field">
-                <span>Aggressiveness (0.1–3)</span>
-                <input id="inpAgg" type="number" min="0.1" max="3" step="0.1" value="1.0" />
-              </label>
-              <div class="callout" id="calloutCtrlSat" hidden>Controller saturated (max accel reached).</div>
             </div>
 
             <div class="grid3">
               <label class="field">
-                <span>Kp</span>
-                <input id="inpKp" type="number" min="0" max="0.1" step="0.0001" value="0.005" />
+                <span>Range standard deviation (km)</span>
+                <input id="inpSigRho" type="number" min="0" step="0.001" value="0.1" />
+                <div class="bounds">min 0</div>
               </label>
+
               <label class="field">
-                <span>Kd</span>
-                <input id="inpKd" type="number" min="0" max="0.1" step="0.0001" value="0.010" />
+                <span>Range-rate standard deviation (km/s)</span>
+                <input id="inpSigRhoDot" type="number" min="0" step="0.001" value="1.0" />
+                <div class="bounds">min 0</div>
               </label>
+
               <label class="field">
-                <span>Ki</span>
-                <input id="inpKi" type="number" min="0" max="0.01" step="0.00001" value="0.00020" />
+                <span>Bearing standard deviation (rad)</span>
+                <input id="inpSigPhi" type="number" min="0" step="0.001" value="0.1" />
+                <div class="bounds">min 0</div>
               </label>
             </div>
-            <label class="field">
-              <span>Integrator clamp (km)</span>
-              <input id="inpIClamp" type="number" min="0" max="200" step="1" value="20" />
-            </label>
-            <div class="help">PI-D acts in RTN (radial/in-track) to reject acceleration disturbances and track the reference orbit.</div>
-          </div>
-        </details>
 
-        <details class="accordion">
-          <summary>Truth disturbance</summary>
-          <div class="cardBody">
-            <label class="toggle">
-              <input id="tglTruthDist" type="checkbox" />
-              <span>Enable truth accel disturbance</span>
-            </label>
-            <div class="grid2">
+            <div class="micro" id="measHelp">
+              When enabled, each visible station generates (ρ, ρ̇, φ) and adds Gaussian noise using the standard deviations above.
+              The EKF uses the same values to build R, so turning noise off should tighten innovations and consistency metrics.
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Process noise / disturbance acceleration</div>
+            <div class="grid">
               <label class="field">
-                <span>Model</span>
-                <select id="selDistModel">
-                  <option value="gm">Gauss–Markov</option>
-                  <option value="white">White</option>
+                <span>Disturbance</span>
+                <select id="selDisturb">
+                  <option value="off" selected>Off</option>
+                  <option value="on">On</option>
                 </select>
               </label>
+
               <label class="field">
-                <span>σ (km/s²)</span>
-                <input id="inpDistSigma" type="number" min="1e-10" max="1e-4" step="1e-10" value="5e-8" />
+                <span>Disturbance accel magnitude (km/s²)</span>
+                <input id="inpSigA" type="number" min="0" step="1e-8" value="1e-7" />
+                <div class="bounds">min 0</div>
               </label>
             </div>
-            <label class="field">
-              <span>τ (s) (Gauss–Markov)</span>
-              <input id="inpDistTau" type="number" min="1" max="5000" step="1" value="300" />
-            </label>
-            <div class="help">Disturbance injects unknown accel into truth only (estimator assumes small Q).</div>
+
+            <div class="row tight">
+              <button class="btn" id="btnPerturbOrbit" type="button">Perturb Orbit</button>
+            </div>
+
+            <div class="micro" id="distHelp">
+              <b>Disturbance accel</b> applies a constant acceleration bias (same direction every step) to the truth dynamics.
+              <b>Perturb Orbit</b> applies a one-time small velocity “kick” so you can watch the controller drive the orbit back.
+            </div>
           </div>
-        </details>
 
-        <details class="accordion">
-          <summary>Estimator + measurement noise</summary>
-          <div class="cardBody">
-            <label class="toggle">
-              <input id="tglMeasNoise" type="checkbox" checked />
-              <span>Enable measurement noise</span>
-            </label>
-            <div class="grid3">
+          <div class="section" id="ctrlSection">
+            <div class="section-title">Controller (thruster acceleration)</div>
+            <div class="grid">
               <label class="field">
-                <span>σρ (km)</span>
-                <input id="inpSigRho" type="number" min="0" max="50" step="0.01" value="0.5" />
+                <span>Controller type</span>
+                <select id="selCtrl">
+                  <option value="off" selected>Off</option>
+                  <option value="lqr">LQR</option>
+                </select>
               </label>
+
               <label class="field">
-                <span>σρ̇ (km/s)</span>
-                <input id="inpSigRhod" type="number" min="0" max="1" step="0.001" value="0.01" />
-              </label>
-              <label class="field">
-                <span>σφ (rad)</span>
-                <input id="inpSigPhi" type="number" min="0" max="0.5" step="0.0005" value="0.002" />
+                <span>MAX THRUSTER ACCELERATION (G)</span>
+                <input id="inpUmaxG" type="number" min="0" step="0.001" value="0.01" />
+                <div class="bounds">min 0</div>
               </label>
             </div>
 
-            <div class="grid2">
-              <label class="field">
-                <span>Q accel σ (km/s²)</span>
-                <input id="inpQsigma" type="number" min="1e-12" max="1e-4" step="1e-10" value="1e-7" />
-              </label>
-              <label class="field">
-                <span>EKF α (inflation)</span>
-                <input id="inpAlpha" type="number" min="1.0" max="2.0" step="0.01" value="1.02" />
-              </label>
+            <div class="micro warnnote" id="ctrlEccNote" style="display:none;">
+              Controller is disabled because this LQR is linearized for a circular orbit. Set eccentricity to 0 to enable it.
             </div>
-            <div class="help">EKF state: [X, Ẋ, Y, Ẏ]. Measurements per visible station: ρ, ρ̇, φ.</div>
           </div>
-        </details>
-      </div>
-    </aside>
-  </div>
+        </div>
+      </aside>
 
-  <section class="plots">
-    <div class="plots__title">Diagnostics</div>
-    <div class="plotsGrid">
-      <div class="plotCard">
-        <div class="plotCard__title">States</div>
-        <canvas id="plotStates"></canvas>
-      </div>
-      <div class="plotCard">
-        <div class="plotCard__title">Errors</div>
-        <canvas id="plotErrors"></canvas>
-      </div>
-      <div class="plotCard">
-        <div class="plotCard__title">Measurements vs Predicted</div>
-        <canvas id="plotMeas"></canvas>
-      </div>
-      <div class="plotCard">
-        <div class="plotCard__title">Inertial Trajectory (plot space)</div>
-        <canvas id="plotTraj"></canvas>
-      </div>
-      <div class="plotCard">
-        <div class="plotCard__title">NEES / NIS</div>
-        <canvas id="plotCons"></canvas>
-      </div>
-      <div class="plotCard">
-        <div class="plotCard__title">Control (RTN accel)</div>
-        <canvas id="plotCtrl"></canvas>
-      </div>
-    </div>
-  </section>
+      <section class="card plots-card">
+        <div class="card-head">
+          <div class="card-title">Diagnostics</div>
+          <div class="diag-actions">
+            <div class="tabs" role="tablist" aria-label="plot tabs">
+              <button class="tab active" data-tab="tabStates" type="button">States</button>
+              <button class="tab" data-tab="tabErrors" type="button">Errors</button>
+              <button class="tab" data-tab="tabMeas" type="button">Meas</button>
+              <button class="tab" data-tab="tabNees" type="button">NEES/NIS</button>
+              <button class="tab" data-tab="tabCtrl" type="button">Control</button>
+            </div>
 
-  <footer class="footer">
-    <div>Client-side demo. No external libraries. Designed for portfolio GN&amp;C/estimation presentation.</div>
-  </footer>
+            <label class="windowctl" aria-label="plot window selector">
+              <span>Window</span>
+              <select id="selPlotWindow">
+                <option value="3600">1h</option>
+                <option value="10800" selected>3h</option>
+                <option value="21600">6h</option>
+                <option value="43200">12h</option>
+              </select>
+            </label>
+          </div>
+        </div>
 
-  <script src="orbit-sim.js"></script>
-</body>
+        <div class="tabpanes">
+          <div class="pane active" id="tabStates">
+            <div class="plotgrid">
+              <div class="plotcard">
+                <div class="plotlabel">X position</div>
+                <canvas class="plot" id="pltX"></canvas>
+              </div>
+              <div class="plotcard">
+                <div class="plotlabel">Y position</div>
+                <canvas class="plot" id="pltY"></canvas>
+              </div>
+              <div class="plotcard">
+                <div class="plotlabel">X velocity</div>
+                <canvas class="plot" id="pltXd"></canvas>
+              </div>
+              <div class="plotcard">
+                <div class="plotlabel">Y velocity</div>
+                <canvas class="plot" id="pltYd"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="pane" id="tabErrors">
+            <div class="plotgrid">
+              <div class="plotcard">
+                <div class="plotlabel">X error ±2σ</div>
+                <canvas class="plot" id="pltErrX"></canvas>
+              </div>
+              <div class="plotcard">
+                <div class="plotlabel">Y error ±2σ</div>
+                <canvas class="plot" id="pltErrY"></canvas>
+              </div>
+              <div class="plotcard">
+                <div class="plotlabel">Ẋ error ±2σ</div>
+                <canvas class="plot" id="pltErrXd"></canvas>
+              </div>
+              <div class="plotcard">
+                <div class="plotlabel">Ẏ error ±2σ</div>
+                <canvas class="plot" id="pltErrYd"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="pane" id="tabMeas">
+            <div class="plotgrid plotgrid-meas">
+              <div class="plotcard">
+                <div class="plotlabel">ρ (km): meas dots vs predicted line</div>
+                <canvas class="plot" id="pltRho"></canvas>
+              </div>
+              <div class="plotcard">
+                <div class="plotlabel">ρ̇ (km/s): meas dots vs predicted line</div>
+                <canvas class="plot" id="pltRhoDot"></canvas>
+              </div>
+              <div class="plotcard">
+                <div class="plotlabel">φ (rad): meas dots vs predicted line</div>
+                <canvas class="plot" id="pltPhi"></canvas>
+              </div>
+            </div>
+
+            <div class="stationboard-wrap">
+              <div class="stationboard-title">Stations</div>
+              <div class="stationboard" id="stationBoard" aria-label="Station board"></div>
+              <div class="micro stationboard-micro">
+                Each box is one station. ACTIVE means that station produced a measurement at the last EKF update.
+              </div>
+            </div>
+          </div>
+
+          <div class="pane" id="tabNees">
+            <div class="plotgrid plotgrid-nees">
+              <div class="plotcard">
+                <div class="plotlabel">NEES (df=4) + 95% bounds</div>
+                <canvas class="plot" id="pltNEES"></canvas>
+              </div>
+              <div class="plotcard">
+                <div class="plotlabel">NIS (df=3m) + 95% bounds</div>
+                <canvas class="plot" id="pltNIS"></canvas>
+              </div>
+            </div>
+
+            <div class="micro" id="neesHelp">
+              <b>NEES</b> checks state consistency: e = x<sub>true</sub> − x̂, and NEES = eᵀP⁻¹e.
+              <b>NIS</b> checks measurement consistency using the innovation and its covariance.
+              If your filter is well tuned, these curves should usually stay inside the 95% bounds (occasional violations are expected).
+            </div>
+          </div>
+
+          <div class="pane" id="tabCtrl">
+            <div class="notice" id="ctrlNotice" style="display:none;">
+              <div class="notice-title">Nothing for the controller to correct yet</div>
+              <div class="notice-body" id="ctrlNoticeBody">
+                Turn on LQR (requires eccentricity = 0) and/or enable a disturbance.
+                Or apply a one-time orbit perturbation to watch recovery.
+              </div>
+              <div class="notice-actions">
+                <button class="btn" id="btnPerturbOrbit2" type="button">Perturb Orbit</button>
+              </div>
+            </div>
+
+            <div class="plotgrid">
+              <div class="plotcard">
+                <div class="plotlabel">u_r, u_t (km/s²)</div>
+                <canvas class="plot" id="pltUrt"></canvas>
+              </div>
+              <div class="plotcard">
+                <div class="plotlabel">‖u‖ (km/s²) + u_max</div>
+                <canvas class="plot" id="pltUm"></canvas>
+              </div>
+              <div class="plotcard">
+                <div class="plotlabel">Controller state: δr (km), δθ (rad)</div>
+                <canvas class="plot" id="pltCtrlErr"></canvas>
+              </div>
+              <div class="plotcard ctrl-status">
+                <div class="plotlabel">Thrusters</div>
+                <div class="statusbox ok" id="ctrlSatBox" aria-label="Thruster saturation status">
+                  <div class="statusbox-left">
+                    <div class="statusbox-title">Saturation</div>
+                    <div class="statusbox-value" id="ctrlSatText">OK</div>
+                  </div>
+                  <div class="statusbox-right">
+                    <div class="statusbox-sub">‖u‖ / u<sub>max</sub></div>
+                    <div class="statusbox-mono" id="ctrlSatFrac">0.00</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="micro">
+              The thrust arrow in the orbit view shows the applied control acceleration.
+              It disappears automatically when control is off or zero.
+            </div>
+          </div>
+        </div>
+
+        <div class="hint small"> Tip: when paused, hover plots for coordinates; drag to pan, scroll to zoom. </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div>All client-side. Lucide is used only for the station icon.</div>
+    </footer>
+
+    <!-- Lucide icon dependency (allowed) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="orbit-sim.js"></script>
+  </body>
 </html>
