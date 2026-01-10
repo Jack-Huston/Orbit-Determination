@@ -2219,24 +2219,39 @@ A separate project will demonstrate a more realistic pulsed-thruster application
           if (active) sizeActiveBody(active.sec);
         });
 
-        // Height reporting to parent (for iframe auto-resize)
-        function postHeight() {
-          const h = Math.max(
-            document.documentElement.scrollHeight,
-            document.body ? document.body.scrollHeight : 0
-          );
-          parent.postMessage({ type: 'orbit-sim-resize', height: h }, '*');
-        }
+    // Height reporting to parent (for iframe auto-resize)
+    let __lastH = 0;
 
-        window.addEventListener('load', postHeight);
-        window.addEventListener('resize', postHeight);
-        if ('ResizeObserver' in window) {
-          const ro = new ResizeObserver(() => postHeight());
-          ro.observe(document.documentElement);
-          if (document.body) ro.observe(document.body);
-        } else {
-          setInterval(postHeight, 500);
-        }
+    function postHeight(force = false) {
+      const h = Math.max(
+        document.documentElement.scrollHeight,
+        document.body ? document.body.scrollHeight : 0
+      );
+
+      if (!force && h === __lastH) return;
+      __lastH = h;
+
+      parent.postMessage({ type: 'orbit-sim-resize', height: h }, '*');
+    }
+
+    // Run a few times after interactions because charts/layout can settle over a frame or two.
+    function bumpHeight() {
+      postHeight(true);
+      requestAnimationFrame(() => postHeight(true));
+      setTimeout(() => postHeight(true), 120);
+    }
+
+    window.addEventListener('load', bumpHeight);
+    window.addEventListener('resize', bumpHeight);
+
+    // Capture interactions that commonly change diagnostics height (tab switches, dropdowns, etc.)
+    document.addEventListener('click', bumpHeight, true);
+    document.addEventListener('input', bumpHeight, true);
+    document.addEventListener('change', bumpHeight, true);
+
+    // Poll as a backstop for overflow-only changes (scrollHeight changes without box resize)
+    setInterval(() => postHeight(false), 250);
+
       })();
     <\/script>
 
