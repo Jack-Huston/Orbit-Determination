@@ -24,7 +24,7 @@ This repository contains MATLAB implementations of control systems and state est
 
 ### Requirements
 
-- MATLAB (version compatible with the code in this repository)
+- MATLAB R2025a (Or compatible version)
 
 ### Notes
 
