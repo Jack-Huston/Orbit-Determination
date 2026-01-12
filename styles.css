@@ -91,7 +91,9 @@ section { scroll-margin-top: calc(var(--nav-h) + 14px); }
 .container { max-width: 1120px; margin: 0 auto; padding: 0 1.25rem; }
 
 .section { padding: 4rem 0; }
+
 .control-section{ padding: 0.5rem 0; }
+
 .section-white { background: rgba(255,255,255,0.65); }
 
 .section-title {
@@ -382,8 +384,8 @@ p { max-width: var(--max-prose); }
   gap: 1.1rem;
   margin-top: 1.6rem;
 }
-.figure-card { min-height: 240px; }
-.figure-card .figure-img { min-height: 240px; }
+.figure-card { min-height: 240px}
+.figure-card .figure-img { min-height: 240px; height: 326px; width: 529px}
 
 /* Callouts */
 .callout {

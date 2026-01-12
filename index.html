@@ -36,14 +36,14 @@
         Back to Portfolio
       </a>
 <div aria-label="On-page navigation" class="nav-links">
-<a class="nav-link" href="#overview">Project Overview</a>
-<a class="nav-link" href="#setup">System Setup</a>
+<a class="nav-link" href="#overview">Overview</a>
+<a class="nav-link" href="#setup">Setup</a>
 <a class="nav-link" href="#ekf">EKF</a>
 <a class="nav-link" href="#lqr">LQR</a>
 <a class="nav-link" href="#verification">Verification</a>
 <a class="nav-link" href="#implementation">Implementation</a>
-<a class="nav-link" href="#demo">Demonstration</a>
-<a class="nav-link" href="#improvements">Improvements</a>
+<a class="nav-link" href="#demo">Demo</a>
+<a class="nav-link" href="#improvements">Next</a>
 </div>
 <button aria-expanded="false" aria-label="Open menu" class="mobile-menu-btn" id="mobileMenuBtn" type="button">
 <svg aria-hidden="true" class="icon-nav" fill="none" viewbox="0 0 24 24">
@@ -58,8 +58,10 @@
 <a class="mobile-link" href="#lqr">LQR</a>
 <a class="mobile-link" href="#verification">Verification</a>
 <a class="mobile-link" href="#implementation">Implementation</a>
-<a class="mobile-link" href="#demo">Demonstration</a>
-<a class="mobile-link" href="#improvements">Improvements</a>
+<a class="mobile-link" href="#demo">Demo</a>
+<a class="mobile-link" href="#improvements">What I’d Do Differently</a>
+<a class="mobile-link" href="#downloads">Reports</a>
+<a class="mobile-link" href="#contact">Contact</a>
 </div>
 </nav>
 <!-- HERO -->
@@ -72,11 +74,11 @@
 <path d="M7 17l-2 2M19 5l-2 2M7 7L5 5M19 19l-2-2" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path>
 <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"></circle>
 </svg>
-          GN&amp;C · Modeling &amp; Simulation
+          GN&amp;C | Modeling and Simulation
         </div>
-<h1 class="project-hero-title">Orbit Determination (EKF) + LQR Control</h1>
+<h1 class="project-hero-title">Orbit Determination with an EKF and LQR Control</h1>
 <p class="project-hero-subtitle">
-          I built a 2D planar orbit simulator that estimates spacecraft state from noisy, intermittent ground-station measurements using an Extended Kalman Filter (EKF), then uses an LQR state-feedback controller (with a fixed acceleration limit) to mitigate injected disturbances. I evaluated the filter using Monte Carlo NEES/NIS consistency checks and monitored controller effort and saturation.
+          I built a 2D orbit simulator that estimates a spacecraft state from noisy ground station measurements using an Extended Kalman Filter (EKF). The estimate drives an LQR state feedback controller with a fixed acceleration limit. I evaluate the filter with Monte Carlo runs using NEES and NIS consistency checks, and I track control effort and saturation.
         </p>
 <div aria-label="Project metadata" class="project-meta" role="list">
 <div class="meta-item" role="listitem">
@@ -95,24 +97,24 @@
 <svg aria-hidden="true" class="icon-meta" fill="none" viewbox="0 0 24 24">
 <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path>
 </svg>
-            MATLAB + browser visualization
+            MATLAB with a browser based visualization
           </div>
 </div>
 <div aria-label="Quick scan" class="kpi-grid">
 <div class="kpi-card">
-<div class="kpi-label">Loop</div>
-<div class="kpi-value">Truth → EKF → LQR</div>
-<div class="kpi-note">Measurement dropouts + actuator saturation handled</div>
+<div class="kpi-label">Closed loop flow</div>
+<div class="kpi-value">Truth propagation → EKF estimate → LQR control</div>
+<div class="kpi-note">Handles measurement gaps and actuator saturation</div>
 </div>
 <div class="kpi-card">
-<div class="kpi-label">Estimator checks</div>
+<div class="kpi-label">Estimator validation</div>
 <div class="kpi-value">NEES / NIS</div>
-<div class="kpi-note">Monte Carlo χ² consistency tests</div>
+<div class="kpi-note">Monte Carlo chi square consistency tests</div>
 </div>
 <div class="kpi-card">
-<div class="kpi-label">Interfaces</div>
+<div class="kpi-label">Key interfaces</div>
 <div class="kpi-value">Dynamics / sensors / actuation</div>
-<div class="kpi-note">Discrete-time noisy measurements</div>
+<div class="kpi-note">Discrete time measurements with noise</div>
 </div>
 </div>
 <div class="hero-actions">
@@ -125,41 +127,37 @@
 <!-- OVERVIEW -->
 <section class="section section-white" id="overview">
 <div class="container">
-<h2 class="section-title">Project Overview</h2>
+<h2 class="section-title">Overview</h2>
 <div class="overview-grid">
 <div class="overview-text">
 <p class="lead">
-            This project combines orbit determination and feedback control in one loop.
-            I kept the physics intentionally simple (planar two-body gravity) so the work stays focused on measurement availability, noise assumptions, and estimator consistency checks.
+            This project couples orbit determination and feedback control in one loop. The dynamics use a simple planar two body gravity model so the focus stays on measurement availability, noise modeling, and estimator consistency.
           </p>
 <div class="bullet-grid">
 <div class="bullet">
 <div aria-hidden="true" class="bullet-dot"></div>
 <div class="bullet-text">
-<div class="bullet-title">Navigation: EKF orbit determination</div>
+<div class="bullet-title">Navigation: EKF based orbit determination</div>
 <div>
-                  Estimate <code>[X, Ẋ, Y, Ẏ]</code> using noisy ground-station range, range-rate, and angle measurements.
-                  When multiple stations are visible, stack measurements and use a block-diagonal <code>R</code>.
+                  Estimate position and velocity in 2D using noisy range, range rate, and angle measurements from ground stations. When multiple stations are in view, stack the measurements and use a block diagonal measurement noise matrix <code>R</code>.
                 </div>
 </div>
 </div>
 <div class="bullet">
 <div aria-hidden="true" class="bullet-dot"></div>
 <div class="bullet-text">
-<div class="bullet-title">Control: LQR stabilization</div>
+<div class="bullet-title">Control: LQR stabilization using the EKF estimate</div>
 <div>
-                  Design an LQR gain on a linearized in-plane model and apply <code>u = −Kx̂</code> with saturation.
-                  Initialize weights with Bryson’s rule and tune the response/effort trade.
+                  Design an LQR gain using a linearized in plane model and apply <code>u = −K x̂</code> with saturation. Initialize weights with Bryson’s rule, then tune the balance between response speed and control effort.
                 </div>
 </div>
 </div>
 <div class="bullet">
 <div aria-hidden="true" class="bullet-dot"></div>
 <div class="bullet-text">
-<div class="bullet-title">Verification: Monte Carlo + consistency statistics</div>
+<div class="bullet-title">Verification: Monte Carlo testing and consistency statistics</div>
 <div>
-                  Run Monte Carlo trials and compare NEES/NIS to χ² bounds.
-                  Use the results to diagnose process/measurement noise mismatch and to understand behavior during measurement gaps.
+                  Run many trials and compare NEES and NIS to chi square bounds. Use the results to spot process and measurement noise mismatch and to see how the filter behaves during measurement gaps.
                 </div>
 </div>
 </div>
@@ -168,9 +166,9 @@
 <div class="callout-body">
 <div aria-hidden="true" class="callout-icon">i</div>
 <div class="callout-text">
-<div class="callout-title">Team context</div>
+<div class="callout-title">Team context and my contributions</div>
 <div>
-                  The course reports were team submissions and include work from other students. This page focuses on the parts I personally implemented and tested.
+                  The course reports were submitted as a team and include work from other students. This page focuses on what I implemented and tested.
                 </div>
 </div>
 </div>
@@ -178,33 +176,30 @@
 </div>
 <aside aria-label="Overview figure" class="overview-image-container">
 <figure class="overview-image">
-<img alt="Earth with ground stations and a satellite line-of-sight visibility concept diagram." class="figure-img" src="images/orbit-visibility-geometry.png"/>
+<img alt="Concept diagram of Earth, ground stations, and satellite visibility." class="figure-img" src="images/orbit-visibility-geometry.png"/>
 <figcaption class="image-caption">
-              Ground-station visibility determines when measurements exist.
-              <span class="muted">Image file: images/orbit-visibility-geometry.png</span>
+              Station visibility determines when measurements are available.
 </figcaption>
 </figure>
 </aside>
 </div>
 <div aria-label="Highlights" class="specs-grid">
 <div class="detail-card">
-<h3 class="detail-card-title">Estimator fundamentals</h3>
+<h3 class="detail-card-title">Estimator summary</h3>
 <p class="detail-card-content">
-            EKF with nonlinear propagation (<code>ode45</code>), Jacobians evaluated at the current estimate, covariance propagation with acceleration-process noise,
-            stacked measurement updates, and a measurement dimension that changes with station visibility.
+            EKF with nonlinear propagation (<code>ode45</code>), Jacobians evaluated at the current estimate, covariance propagation with acceleration process noise, stacked measurement updates, and a measurement size that changes with station visibility.
           </p>
 </div>
 <div class="detail-card">
-<h3 class="detail-card-title">Control fundamentals</h3>
+<h3 class="detail-card-title">Control summary</h3>
 <p class="detail-card-content">
-            LQR designed about a nominal circular orbit, including a state-space model, gain synthesis, weight selection via Bryson’s rule,
-            and saturation to a fixed maximum acceleration used in this demo.
+            LQR designed about a nominal circular orbit using a linear state space model, gain synthesis, Bryson’s rule weight selection, and saturation to a fixed maximum acceleration used in this demo.
           </p>
 </div>
 <div class="detail-card">
-<h3 class="detail-card-title">Simulation workflow</h3>
+<h3 class="detail-card-title">Simulation approach</h3>
 <p class="detail-card-content">
-            Separate truth vs. filter-assumed noise, time-varying station visibility, Monte Carlo trials, and instrumentation to inspect errors, innovations, and control saturation.
+            Separate truth noise from the noise assumed by the filter, include time varying station visibility, run Monte Carlo trials, and log errors, innovations, and control saturation.
           </p>
 </div>
 </div>
@@ -213,13 +208,12 @@
 <!-- SETUP -->
 <section class="section" id="setup">
 <div class="container">
-<h2 class="section-title">System Setup</h2>
+<h2 class="section-title">Setup</h2>
 <div class="two-col">
 <div class="detail-card">
-<h3 class="detail-card-title">Truth dynamics (planar two-body)</h3>
+<h3 class="detail-card-title">Truth dynamics in a planar two body model</h3>
 <p class="detail-card-content">
-            The truth model propagates nonlinear two-body dynamics and injects disturbances as additive acceleration noise.
-            I use the same acceleration interface for both disturbances and actuation so I can compare truth inputs against what the EKF assumes.
+            The truth model propagates nonlinear two body dynamics and injects disturbances as additive acceleration noise. Disturbances and actuation share the same acceleration interface so the truth inputs can be compared directly to the model used inside the EKF.
           </p>
 <div aria-label="Truth dynamics equation" class="equation-block">
             \[
@@ -238,14 +232,13 @@
             \]
           </div>
 <p class="detail-card-content">
-            In the estimation study, the truth trajectory is propagated with <code>ode45</code> and sampled at a fixed update period for EKF updates.
+            The truth trajectory is propagated with numerical integration and sampled at a fixed update period for EKF updates.
           </p>
 </div>
 <div class="detail-card">
-<h3 class="detail-card-title">Measurements (ground stations)</h3>
+<h3 class="detail-card-title">Ground station measurements</h3>
 <p class="detail-card-content">
-            Each visible station returns range <code>ρ</code>, range-rate <code>ρ̇</code>, and angle <code>ϕ</code>.
-            Visibility changes over time, so the measurement dimension changes too. When no stations are visible, the filter runs prediction-only and uncertainty grows; when measurements return, the filter tightens again.
+            Each visible station returns range, range rate, and angle. Visibility changes over time, so the measurement size changes. When no stations are visible, the filter only predicts forward and uncertainty grows. When measurements return, uncertainty shrinks again.
           </p>
 <div aria-label="Measurement model equation" class="equation-block">
             \[
@@ -266,17 +259,15 @@
 </div>
 <div aria-label="Setup figures" class="figure-grid">
 <figure class="figure-card">
-<img alt="Concept diagram showing Earth, ground stations, and a satellite with an in-view line-of-sight region." class="figure-img" src="images/orbit-visibility-geometry.png"/>
+<img alt="Diagram of Earth, ground stations, and the line of sight region that defines visibility." class="figure-img" src="images/orbit-visibility-geometry-landscape.png"/>
 <figcaption class="figure-caption">
-            Station geometry and line-of-sight.
-            <span class="muted">images/orbit-visibility-geometry.png</span>
+            Station measurement geometry with shown line of sight. Range and angle are shown.
 </figcaption>
 </figure>
 <figure class="figure-card">
-<img alt="Concept diagram showing radial and tangential control directions along an orbit." class="figure-img" src="images/rt-control-axes.png"/>
+<img alt="Diagram of radial and tangential control axes along the orbit." class="figure-img" src="images/rt-control-axes.png"/>
 <figcaption class="figure-caption">
-            Control directions used by the in-plane model (radial / tangential).
-            <span class="muted">images/rt-control-axes.png</span>
+            Control axes used by the in plane control model. Radial and tangential forcing shown.
 </figcaption>
 </figure>
 </div>
@@ -285,12 +276,12 @@
 <!-- EKF -->
 <section class="section section-white" id="ekf">
 <div class="container">
-<h2 class="section-title">Extended Kalman Filter (EKF)</h2>
+<h2 class="section-title">Extended Kalman Filter</h2>
 <div aria-label="EKF algorithm" class="algo-grid">
 <div class="algo-card">
 <div class="algo-header">
 <div class="algo-step">1</div>
-<h3 class="algo-title">Predict</h3>
+<h3 class="algo-title">Predict step</h3>
 </div>
 <p class="algo-text">
             Propagate the nonlinear state estimate forward with the dynamics. Evaluate the dynamics Jacobian at the most recent corrected estimate.
@@ -306,11 +297,10 @@
 <div class="algo-card">
 <div class="algo-header">
 <div class="algo-step">2</div>
-<h3 class="algo-title">Propagate covariance</h3>
+<h3 class="algo-title">Covariance propagation</h3>
 </div>
 <p class="algo-text">
-            Propagate covariance with the discrete transition and an acceleration-noise mapping.
-            Use NEES/NIS behavior over Monte Carlo trials to guide noise tuning.
+            Propagate covariance using the linearized transition and an acceleration noise mapping. Use NEES and NIS trends across Monte Carlo trials to tune noise levels.
           </p>
 <div aria-label="EKF covariance propagation equation" class="equation-block">
             \[
@@ -321,10 +311,10 @@
 <div class="algo-card">
 <div class="algo-header">
 <div class="algo-step">3</div>
-<h3 class="algo-title">Correct</h3>
+<h3 class="algo-title">Update step</h3>
 </div>
 <p class="algo-text">
-            Stack measurements from all visible stations, build a block-diagonal <code>R</code>, and apply the standard EKF update.
+            Stack measurements from all visible stations, build a block diagonal <code>R</code>, and apply the EKF update.
           </p>
 <div aria-label="EKF correction equations" class="equation-block">
             \[
@@ -342,22 +332,22 @@
 </div>
 </div>
 <div class="detail-card">
-<h3 class="detail-card-title">Implementation details that actually matter</h3>
+<h3 class="detail-card-title">Implementation details</h3>
 <div class="two-col">
 <div>
 <p class="detail-card-content">
-<strong>Stacking:</strong> if <em>m</em> stations are visible, the measurement vector is 3m×1. The indexing/order needs to stay consistent across <code>y</code>, <code>H</code>, and <code>R</code>.
+<strong>Stacking:</strong> If <em>m</em> stations are visible, the measurement vector has length 3m. The ordering must stay consistent across <code>y</code>, <code>H</code>, and <code>R</code>.
             </p>
 <p class="detail-card-content">
-<strong>Linearization:</strong> If your Jacobians don’t match what you propagate, the EKF gets unreliable fast. I evaluate Jacobians at the corrected estimate each step.
+<strong>Linearization:</strong> If the Jacobians do not match the model used in propagation, the EKF becomes unreliable fast. I evaluate Jacobians at the corrected estimate each step.
             </p>
 </div>
 <div>
 <p class="detail-card-content">
-<strong>Dropouts:</strong> Visibility gaps aren’t an edge case — they’re normal. During gaps, uncertainty grows; after gaps, measurements pull the estimate back in.
+<strong>Dropouts:</strong> Visibility gaps are common, especially during lower orbits. During gaps, uncertainty grows. After gaps, measurements pull the estimate back toward the truth.
             </p>
 <p class="detail-card-content">
-<strong>Noise assumptions:</strong> I keep separate truth vs. filter-assumed noise so I can test mismatch and see how NEES/NIS changes.
+<strong>Noise assumptions:</strong> Truth noise is separate from the noise assumed by the filter so mismatch can be tested and its impact on NEES and NIS can be measured.
             </p>
 </div>
 </div>
@@ -367,13 +357,12 @@
 <!-- LQR -->
 <section class="section" id="lqr">
 <div class="container">
-<h2 class="section-title">Linear Quadratic Regulator (LQR)</h2>
+<h2 class="section-title">Linear Quadratic Regulator</h2>
 <div class="two-col">
 <div class="detail-card">
-<h3 class="detail-card-title">Linearized perturbation model</h3>
+<h3 class="detail-card-title">Linearized perturbation model about a circular orbit</h3>
 <p class="detail-card-content">
-            The controller is designed by linearizing about a nominal circular orbit of radius <code>r₀</code>.
-            I express the state as small in-plane perturbations and design a two-axis control input.
+            The controller is designed by linearizing about a nominal circular orbit of radius <code>r₀</code>. The state is expressed as small in plane perturbations with a two axis control input.
           </p>
 <div aria-label="LQR state definition" class="equation-block">
             \[
@@ -389,7 +378,7 @@
             \]
           </div>
 <p class="detail-card-content">
-            With mean motion <code>n = sqrt(μ / r₀³)</code>, one common form of the in-plane linearization is:
+            With mean motion <code>n = sqrt(μ / r₀³)</code>, one common in plane linearization is:
           </p>
 <div aria-label="Linearized dynamics" class="equation-block">
             \[
@@ -403,9 +392,9 @@
           </div>
 </div>
 <div class="detail-card">
-<h3 class="detail-card-title">Cost, weights, and saturation</h3>
+<h3 class="detail-card-title">Cost function, weights, and saturation</h3>
 <p class="detail-card-content">
-            LQR minimizes state deviation and control effort and returns a stabilizing gain <code>K</code>:
+            LQR minimizes state error and control effort and returns a stabilizing gain <code>K</code>.
           </p>
 <div aria-label="LQR objective" class="equation-block">
             \[
@@ -415,8 +404,7 @@
             \]
           </div>
 <p class="detail-card-content">
-            I initialize <code>Q</code> and <code>R</code> with Bryson’s rule and tune the overall trade with a scalar multiplier.
-            The commanded acceleration is saturated to a fixed limit used for this demo (0.01 g).
+            I initialize <code>Q</code> and <code>R</code> with Bryson’s rule and tune the trade between tracking and effort with a scalar multiplier. The commanded acceleration is saturated to a fixed limit used for this demo, 0.01 g.
           </p>
 <div aria-label="Bryson weighting" class="equation-block">
             \[
@@ -428,10 +416,9 @@
 </div>
 </div>
 <div class="detail-card">
-<h3 class="detail-card-title">Controller evaluation</h3>
+<h3 class="detail-card-title">Controller evaluation approach</h3>
 <p class="detail-card-content">
-          I compare designs using time response and integrated control effort under the same acceleration limit.
-          Saturation matters: once the limiter engages, performance is constrained by available acceleration rather than feedback gain.
+          I compare designs using time response and integrated control effort under the same acceleration limit. Once saturation engages, performance is limited by available acceleration rather than by the feedback gain.
         </p>
 </div>
 </div>
@@ -439,25 +426,24 @@
 <!-- VERIFICATION -->
 <section class="section section-white" id="verification">
 <div class="container">
-<h2 class="section-title">Verification &amp; Testing</h2>
+<h2 class="section-title">Verification and testing</h2>
 <div class="specs-grid">
 <div class="detail-card">
-<h3 class="detail-card-title">NEES / NIS consistency</h3>
+<h3 class="detail-card-title">NEES and NIS consistency checks</h3>
 <p class="detail-card-content">
-            I evaluate filter consistency using NEES (state error) and NIS (innovation) and compare them to χ² bounds.
-            These checks help diagnose under/overconfident covariance tuning across many trials.
+            I evaluate filter consistency using NEES for state error and NIS for innovation error, and compare them to chi square bounds. These checks reveal underconfident or overconfident covariance tuning across many trials.
           </p>
 </div>
 <div class="detail-card">
 <h3 class="detail-card-title">Monte Carlo setup</h3>
 <p class="detail-card-content">
-            I randomize the initial truth state around the filter’s initial estimate using the initial covariance and run repeated trials. This exposes failure modes that a single run can hide.
+            I randomize the initial truth state around the filter initial estimate using the initial covariance, then run repeated trials. This exposes failure modes that a single run can hide.
           </p>
 </div>
 <div class="detail-card">
 <h3 class="detail-card-title">Bounded actuation</h3>
 <p class="detail-card-content">
-            The controller command is saturated to a fixed acceleration capability (0.01 g in this demo). This is a simplification — it’s a clean way to compare controllers without implying a flight-realistic thruster model.
+            The controller command is saturated to a fixed acceleration capability, 0.01 g in this demo. This keeps comparisons consistent across controller designs.
           </p>
 </div>
 </div>
@@ -466,18 +452,18 @@
 <!-- IMPLEMENTATION -->
 <section class="section" id="implementation">
 <div class="container">
-<h2 class="section-title">Implementation</h2>
+<h2 class="section-title">Implementation summary</h2>
 <!-- Removed the "What this is (and isn’t)" panel -->
 <div class="one-col">
 <div class="detail-card">
-<h3 class="detail-card-title">What’s implemented</h3>
+<h3 class="detail-card-title">What I implemented</h3>
 <p class="detail-card-content">
-            This project page documents a coupled estimation + control loop with time-varying measurement availability. The algorithms were developed in MATLAB; this site presents the results and links to the supporting materials.
+            This page documents a coupled estimation and control loop with time varying measurement availability. The algorithms were developed in MATLAB. This site presents results and links to supporting materials.
           </p>
 <ul class="list">
-<li>Planar two-body truth propagation with injected acceleration disturbance</li>
-<li>Multi-station measurement model with visibility-driven dropouts</li>
-<li>EKF predict/update with stacked measurements</li>
+<li>Planar two body truth propagation with injected acceleration disturbances</li>
+<li>Multi station measurement model with visibility driven dropouts</li>
+<li>EKF predict and update with stacked measurements</li>
 <li>LQR control with saturation</li>
 </ul>
 </div>
@@ -487,13 +473,13 @@
 <!-- DEMO -->
 <section class="section section-white" id="demo">
 <div class="container">
-<h2 class="section-title">Interactive Demo</h2>
+<h2 class="section-title">Interactive demo</h2>
 </div>
 <div aria-label="Interactive orbit EKF + LQR demo" class="demo-bleed"><div class="orbit-sim"> <header class="topbar">
 <div class="brand">
 <div class="brand-text">
-<div class="brand-title">Demonstration of Extended Kalman Filter</div>
-<div class="brand-sub">2D ECI · RK4  · EKF · 12 rotating ground stations · Linear Quadratic Controller</div>
+<div class="brand-title">Orbit Navigation & Sensor Fusion Demo</div>
+<div class="brand-sub">2D inertial frame · RK4 · EKF · 12 rotating ground stations · LQR controller</div>
 </div>
 </div>
 <div class="statusline">
@@ -556,7 +542,7 @@
 </section>
 <section class="card rel-card">
 <div class="card-head">
-<div class="card-title">Relative Position &amp; Covariance</div>
+<div class="card-title">Relative position and covariance</div>
 </div>
 <div class="rel-wrap">
 <div class="ellipse-wrap">
@@ -564,15 +550,14 @@
 </div>
 <canvas aria-label="Relative position and covariance ellipse plot" id="ellipseCanvas"></canvas>
 <div class="micro" id="ellipseHelp">
-                      Centered at the EKF estimate (0,0). The dot shows the truth offset (truth − estimate) at the most recent measurement update.
-                      Ellipses show 1σ, 2σ, and 3σ position uncertainty from the EKF covariance.
+                      Centered at the EKF estimate. The dot shows the position error at the most recent measurement update, truth minus estimate. Ellipses show 1 sigma, 2 sigma, and 3 sigma position uncertainty from the EKF covariance.
                     </div>
 </div>
 </div>
 </section>
 <aside class="card controls-card">
 <div class="card-head">
-<div class="card-title">Simulation / Controls</div>
+<div class="card-title">Simulation and controls</div>
 </div>
 <!-- Pinned full-width simulation control bar (IDs unchanged) -->
 <div aria-label="Run and speed controls" class="simbarwrap" id="simBar">
@@ -601,7 +586,7 @@
 <label class="field">
 <span>Eccentricity</span>
 <input id="inpEcc" max="0.6" min="0" step="0.001" type="number" value="0.0"/>
-<div class="bounds">Controller requires e = 0</div>
+<div class="bounds">Controller is tuned for circular orbits. Use e = 0 for stable behavior.</div>
 </label>
 </div>
 <div class="micro">
@@ -824,15 +809,15 @@ A separate project will demonstrate a more realistic pulsed-thruster application
 <div class="pane" id="tabMeas">
 <div class="plotgrid plotgrid-meas">
 <div class="plotcard">
-<div class="plotlabel">ρ (km): meas dots vs predicted line</div>
+<div class="plotlabel">Range ρ (km): measurements as dots, prediction as a line</div>
 <canvas class="plot" id="pltRho"></canvas>
 </div>
 <div class="plotcard">
-<div class="plotlabel">ρ̇ (km/s): meas dots vs predicted line</div>
+<div class="plotlabel">Range rate ρ-dot (km/s): measurements as dots, prediction as a line</div>
 <canvas class="plot" id="pltRhoDot"></canvas>
 </div>
 <div class="plotcard">
-<div class="plotlabel">φ (rad): meas dots vs predicted line</div>
+<div class="plotlabel">Angle phi (rad): measurements as dots, prediction as a line</div>
 <canvas class="plot" id="pltPhi"></canvas>
 </div>
 </div>
@@ -840,7 +825,7 @@ A separate project will demonstrate a more realistic pulsed-thruster application
 <div class="stationboard-title">Stations</div>
 <div aria-label="Station board" class="stationboard" id="stationBoard"></div>
 <div class="micro stationboard-micro">
-                Each box is one station. ACTIVE means that station produced a measurement at the last EKF update.
+                Each box is one station. ACTIVE means the station produced a measurement at the last EKF update.
               </div>
 </div>
 </div>
@@ -905,36 +890,44 @@ A separate project will demonstrate a more realistic pulsed-thruster application
             </div>
 </div>
 </div>
-<div class="hint small"> Tip: when paused, hover plots for coordinates; drag to pan, scroll to zoom. </div>
+<div class="hint small"> Tip: when paused, hover on plots to see values. Drag to pan. Scroll to zoom. </div>
 </section>
 </main>
+<!-- Lucide icon dependency (allowed) -->
+</div></div>
+<div class="container">
+<div class="demo-actions">
+<a class="btn-primary btn-inline" href="#downloads">Reports</a>
+<a class="btn-secondary btn-inline" href="https://github.com/jack-huston" rel="noopener" target="_blank">GitHub</a>
+</div>
+</div>
 
 </section>
 <!-- IMPROVEMENTS -->
 <section class="section" id="improvements">
 <div class="container">
-<h2 class="section-title">What I’d Do Differently / Improvements</h2>
+<h2 class="section-title">Improvements to make next</h2>
 <div class="two-col">
 <div class="detail-card">
-<h3 class="detail-card-title">Thruster-realistic control (pulsing + ΔV)</h3>
+<h3 class="detail-card-title">Thruster like control using pulsing and delta V</h3>
 <p class="detail-card-content">
-            The current demo applies continuous acceleration, which is convenient for control comparison but not representative of many real spacecraft thrusters. A flight-like actuation layer would convert commands to discrete firings (with minimum impulse bit) and track propellant/ΔV. It would also benefit from deadband logic to avoid “chasing” estimator noise.
+            The demo applies continuous acceleration, which helps compare controllers but does not match many real spacecraft thrusters. A more realistic actuation layer would convert commands into discrete firings with a minimum impulse bit and would track propellant use and delta V. Deadband logic would also reduce chatter driven by estimator noise.
           </p>
 <ul class="list">
 <li>Pulse-width or pulse-frequency modulation with a minimum impulse bit</li>
 <li>Deadband + hysteresis to reduce chatter near the target</li>
-<li>Report ΔV, duty cycle, and missed-command cases alongside state response</li>
+<li>Report delta V, duty cycle, and missed command cases alongside state response</li>
 </ul>
 </div>
 <div class="detail-card">
-<h3 class="detail-card-title">Constraint-aware outer loop</h3>
+<h3 class="detail-card-title">Constraint aware outer loop</h3>
 <p class="detail-card-content">
-            LQR is a clean baseline, but it does not enforce operational constraints beyond saturation. For realistic operations, you’d likely add an outer layer that explicitly trades performance against ΔV/propellant and handles constraints directly.
+            LQR is a strong baseline, but it only handles limits through saturation. A more operational setup adds an outer layer that trades performance against propellant and delta V, and that enforces constraints directly.
           </p>
 <ul class="list">
 <li>Per-axis constraints and optional rate/settling constraints</li>
-<li>Optional MPC/QP layer for constraint handling and allocation</li>
-<li>Extend Monte Carlo to harsher dropouts and larger initial errors</li>
+<li>Optional MPC or QP layer for constraint handling and allocation</li>
+<li>Extend Monte Carlo tests to longer dropouts and larger initial errors</li>
 </ul>
 </div>
 </div>
@@ -943,10 +936,10 @@ A separate project will demonstrate a more realistic pulsed-thruster application
 <!-- DOWNLOADS -->
 <section class="section section-white" id="downloads">
 <div class="container">
-<h2 class="section-title">Reports &amp; Supporting Material</h2>
+<h2 class="section-title">Reports and supporting material</h2>
 <div class="download-row">
 <div class="detail-card">
-<h3 class="detail-card-title">ASEN 5044 — Statistical Estimation of Dynamic Systems Report (PDF)</h3>
+<h3 class="detail-card-title">ASEN 5044: Statistical Estimation of Dynamic Systems report (PDF)</h3>
 <p class="detail-card-content">
             Orbit determination with nonlinear filtering, station geometry, stacked measurement updates, and NEES/NIS testing.
           </p>
@@ -955,7 +948,7 @@ A separate project will demonstrate a more realistic pulsed-thruster application
 </div>
 </div>
 <div class="detail-card">
-<h3 class="detail-card-title">ASEN 5014 — Linear Control Systems Report (PDF)</h3>
+<h3 class="detail-card-title">ASEN 5014: Linear Control Systems report (PDF)</h3>
 <p class="detail-card-content">
             Linearized orbital perturbation model, LQR synthesis and tuning, and performance comparison against a manual controller.
           </p>
@@ -966,10 +959,10 @@ A separate project will demonstrate a more realistic pulsed-thruster application
 <div class="detail-card">
 <h3 class="detail-card-title">Code</h3>
 <p class="detail-card-content">
-            Source code (In Matlab) for the demo and supporting scripts.
+            Source code for the demo and supporting scripts.
           </p>
 <div class="card-actions">
-<a class="btn-primary btn-inline" href="https://github.com/Jack-Huston/Orbit-Determination/tree/main/Matlab%20Code" rel="noopener" target="_blank">GitHub</a>
+<a class="btn-primary btn-inline" href="https://github.com/jack-huston" rel="noopener" target="_blank">GitHub</a>
 </div>
 </div>
 </div>
@@ -979,9 +972,10 @@ A separate project will demonstrate a more realistic pulsed-thruster application
 <section class="section contact-section" id="contact">
 <div class="contact-glow"></div>
 <div class="container contact-container">
-<h2 class="section-title contact-title">Let's Connect</h2>
+<h2 class="section-title contact-title">Contact</h2>
 <p class="contact-subtitle">
-        If you're interested, I want to chat! Please reach out via email or LinkedIn below.
+        Interested in discussing GN&amp;C roles or this project? I'd love to chat.<br>
+        Please reach out by email or LinkedIn below.
       </p>
 <div class="contact-links">
 <a class="btn-cta-secondary" href="https://jack-huston.github.io/#projects">
@@ -1004,7 +998,7 @@ A separate project will demonstrate a more realistic pulsed-thruster application
 <div class="footer-content">
 <span>© <span id="year"></span> Jack Huston.</span>
 <i class="icon-footer" data-lucide="rocket"></i>
-<span>Early career engineer looking to build the next generation of GN&C systems.</span>
+<span>Building the next generation of GN&amp;C tools.</span>
 </div>
 </footer>
 <!-- Copy toast -->
