@@ -3274,3 +3274,136 @@ if (s.ctrlMode === 'lqr' && controllerAllowed()) {
     });
   });
 })();
+
+/* ------------------------------------------------------------
+   UI helpers for the embedded demo (accordion controls)
+   Extracted from the previously inlined demo document.
+   ------------------------------------------------------------ */
+(() => {
+  'use strict';
+
+  function initControlsAccordion() {
+    const controlsRoot = document.querySelector('.orbit-sim .controls');
+    if (!controlsRoot) return;
+
+    // Guard against double-init (e.g., hot reload, partial rerenders).
+    if (controlsRoot.dataset.accordionInit === '1') return;
+    controlsRoot.dataset.accordionInit = '1';
+
+    const wanted = [
+      'Initial condition / desired orbit',
+      'Measurement noise (per station)',
+      'Process noise / disturbance acceleration',
+      'Controller'
+    ];
+
+    const sections = Array.from(controlsRoot.querySelectorAll('.section'));
+    const picked = [];
+
+    for (const sec of sections) {
+      // Skip if already processed.
+      if (sec.querySelector(':scope > .section-toggle')) continue;
+
+      const titleEl = sec.querySelector(':scope > .section-title');
+      if (!titleEl) continue;
+
+      const titleText = (titleEl.textContent || '').trim();
+      const isWanted =
+        wanted.includes(titleText) ||
+        titleText.toLowerCase().startsWith('controller');
+
+      if (!isWanted) continue;
+
+      // Wrap body (everything except title) so we can collapse it.
+      const body = document.createElement('div');
+      body.className = 'section-body';
+
+      const kids = Array.from(sec.childNodes);
+      const titleIdx = kids.findIndex((n) => n === titleEl);
+      for (let i = titleIdx + 1; i < kids.length; i++) body.appendChild(kids[i]);
+
+      // Replace title with a button.
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'section-toggle';
+      btn.setAttribute('aria-expanded', 'false');
+
+      const label = document.createElement('span');
+      label.className = 'section-toggle-label';
+      label.textContent = titleText;
+
+      const chev = document.createElement('span');
+      chev.className = 'section-toggle-chevron';
+      chev.setAttribute('aria-hidden', 'true');
+      chev.textContent = '›';
+
+      btn.appendChild(label);
+      btn.appendChild(chev);
+
+      titleEl.replaceWith(btn);
+      sec.appendChild(body);
+      sec.classList.add('collapsed');
+      picked.push({ sec, btn, body });
+    }
+
+    // Move Δt into the first accordion section so it scrolls with the IC panel.
+    const dtGrid = controlsRoot.querySelector(':scope > .grid');
+    const icSec = controlsRoot.querySelector('.orbit-ic-section');
+    if (dtGrid && icSec) {
+      const icBody = icSec.querySelector('.section-body');
+      if (icBody) icBody.appendChild(dtGrid);
+    }
+
+    function sizeActiveBody(activeSec) {
+      const controls = controlsRoot;
+      const card = controlsRoot.closest('.controls-card') || document.querySelector('.orbit-sim .controls-card');
+      if (!controls || !card) return;
+
+      // Available vertical space is the controls area height.
+      const controlsH = controls.clientHeight;
+      if (!Number.isFinite(controlsH) || controlsH <= 0) return;
+
+      // Fixed height = sum of all toggles + gaps.
+      let fixed = 0;
+      for (const { btn } of picked) fixed += btn.offsetHeight;
+
+      // Add a bit for inter-section spacing.
+      fixed += Math.max(0, picked.length - 1) * 6;
+
+      // Remaining height goes to the active body.
+      const maxBody = Math.max(120, controlsH - fixed - 12);
+
+      for (const { sec, body } of picked) {
+        body.style.maxHeight = (sec === activeSec) ? `${maxBody}px` : '';
+      }
+    }
+
+    function openOnly(target) {
+      for (const item of picked) {
+        const isTarget = item.sec === target;
+        item.sec.classList.toggle('collapsed', !isTarget);
+        item.btn.setAttribute('aria-expanded', String(isTarget));
+      }
+      sizeActiveBody(target);
+    }
+
+    // Default open first.
+    if (picked.length) openOnly(picked[0].sec);
+
+    for (const item of picked) {
+      item.btn.addEventListener('click', () => openOnly(item.sec));
+    }
+
+    // Recompute body max-height on resize.
+    window.addEventListener('resize', () => {
+      const active = picked.find((p) => p.btn.getAttribute('aria-expanded') === 'true');
+      if (active) sizeActiveBody(active.sec);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initControlsAccordion);
+  } else {
+    initControlsAccordion();
+  }
+})();

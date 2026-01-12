@@ -1,19 +1,17 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="description" content="Orbit determination with an Extended Kalman Filter (EKF) and orbit stabilization using an LQR controller, with Monte Carlo NEES/NIS consistency checks." />
-  <title>EKF Orbit Determination + LQR Control | Portfolio</title>
-
-  <!-- Favicon (GitHub Pages root) -->
-  <link rel="icon" href="/favicon.ico" />
-
-  <link rel="stylesheet" href="styles.css" />
-  <script src="https://unpkg.com/lucide@latest"></script>
-
-  <!-- MathJax (LaTeX rendering) -->
-  <script>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<meta content="Orbit determination with an Extended Kalman Filter (EKF) and orbit stabilization using an LQR controller, with Monte Carlo NEES/NIS consistency checks." name="description"/>
+<title>EKF Orbit Determination + LQR Control | Portfolio</title>
+<!-- Favicon (GitHub Pages root) -->
+<link href="/favicon.ico" rel="icon"/>
+<link href="styles.css" rel="stylesheet"/>
+<script src="https://unpkg.com/lucide@latest"></script>
+<!-- MathJax (LaTeX rendering) -->
+<script>
     window.MathJax = {
       tex: {
         inlineMath: [['\\(', '\\)']],
@@ -25,229 +23,207 @@
       }
     };
   </script>
-  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
-</head>
-
+<script async="" id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<script defer="True" src="simulation.js"></script></head>
 <body>
-  <a class="skip-link" href="#overview">Skip to content</a>
-
-  <nav class="navbar" aria-label="Primary">
-    <div class="nav-container container">
-      <a class="nav-back-btn" href="https://jack-huston.github.io/#projects" aria-label="Back to portfolio">
-        <svg class="icon-nav" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+<a class="skip-link" href="#overview">Skip to content</a>
+<nav aria-label="Primary" class="navbar">
+<div class="nav-container container">
+<a aria-label="Back to portfolio" class="nav-back-btn" href="https://jack-huston.github.io/#projects">
+<svg aria-hidden="true" class="icon-nav" fill="none" viewbox="0 0 24 24">
+<path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
         Back to Portfolio
       </a>
-
-      <div class="nav-links" aria-label="On-page navigation">
-        <a class="nav-link" href="#overview">Overview</a>
-        <a class="nav-link" href="#setup">Setup</a>
-        <a class="nav-link" href="#ekf">EKF</a>
-        <a class="nav-link" href="#lqr">LQR</a>
-        <a class="nav-link" href="#verification">Verification</a>
-        <a class="nav-link" href="#implementation">Implementation</a>
-        <a class="nav-link" href="#demo">Demo</a>
-        <a class="nav-link" href="#improvements">Next</a>
-      </div>
-
-      <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open menu" aria-expanded="false">
-        <svg class="icon-nav" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </button>
-    </div>
-
-    <div class="mobile-menu container" id="mobileMenu" aria-label="Mobile menu">
-      <a class="mobile-link" href="#overview">Overview</a>
-      <a class="mobile-link" href="#setup">Setup</a>
-      <a class="mobile-link" href="#ekf">EKF</a>
-      <a class="mobile-link" href="#lqr">LQR</a>
-      <a class="mobile-link" href="#verification">Verification</a>
-      <a class="mobile-link" href="#implementation">Implementation</a>
-      <a class="mobile-link" href="#demo">Demo</a>
-      <a class="mobile-link" href="#improvements">What I’d Do Differently</a>
-      <a class="mobile-link" href="#downloads">Reports</a>
-      <a class="mobile-link" href="#contact">Contact</a>
-    </div>
-  </nav>
-
-  <!-- HERO -->
-  <header class="project-hero">
-    <div class="container">
-      <div class="project-hero-content">
-        <div class="project-badge">
-          <svg class="icon-badge" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 2v4M12 18v4M4 12H2M22 12h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <path d="M7 17l-2 2M19 5l-2 2M7 7L5 5M19 19l-2-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/>
-          </svg>
+<div aria-label="On-page navigation" class="nav-links">
+<a class="nav-link" href="#overview">Overview</a>
+<a class="nav-link" href="#setup">Setup</a>
+<a class="nav-link" href="#ekf">EKF</a>
+<a class="nav-link" href="#lqr">LQR</a>
+<a class="nav-link" href="#verification">Verification</a>
+<a class="nav-link" href="#implementation">Implementation</a>
+<a class="nav-link" href="#demo">Demo</a>
+<a class="nav-link" href="#improvements">Next</a>
+</div>
+<button aria-expanded="false" aria-label="Open menu" class="mobile-menu-btn" id="mobileMenuBtn" type="button">
+<svg aria-hidden="true" class="icon-nav" fill="none" viewbox="0 0 24 24">
+<path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+<div aria-label="Mobile menu" class="mobile-menu container" id="mobileMenu">
+<a class="mobile-link" href="#overview">Overview</a>
+<a class="mobile-link" href="#setup">Setup</a>
+<a class="mobile-link" href="#ekf">EKF</a>
+<a class="mobile-link" href="#lqr">LQR</a>
+<a class="mobile-link" href="#verification">Verification</a>
+<a class="mobile-link" href="#implementation">Implementation</a>
+<a class="mobile-link" href="#demo">Demo</a>
+<a class="mobile-link" href="#improvements">What I’d Do Differently</a>
+<a class="mobile-link" href="#downloads">Reports</a>
+<a class="mobile-link" href="#contact">Contact</a>
+</div>
+</nav>
+<!-- HERO -->
+<header class="project-hero">
+<div class="container">
+<div class="project-hero-content">
+<div class="project-badge">
+<svg aria-hidden="true" class="icon-badge" fill="none" viewbox="0 0 24 24">
+<path d="M12 2v4M12 18v4M4 12H2M22 12h-2" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path>
+<path d="M7 17l-2 2M19 5l-2 2M7 7L5 5M19 19l-2-2" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path>
+<circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"></circle>
+</svg>
           GN&amp;C · Modeling &amp; Simulation
         </div>
-
-        <h1 class="project-hero-title">Orbit Determination (EKF) + LQR Control</h1>
-
-        <p class="project-hero-subtitle">
+<h1 class="project-hero-title">Orbit Determination (EKF) + LQR Control</h1>
+<p class="project-hero-subtitle">
           I built a 2D planar orbit simulator that estimates spacecraft state from noisy, intermittent ground-station measurements using an Extended Kalman Filter (EKF), then uses an LQR state-feedback controller (with a fixed acceleration limit) to mitigate injected disturbances. I evaluated the filter using Monte Carlo NEES/NIS consistency checks and monitored controller effort and saturation.
         </p>
-
-        <div class="project-meta" role="list" aria-label="Project metadata">
-          <div class="meta-item" role="listitem">
-            <svg class="icon-meta" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M8 7V3m8 4V3M5 11h14M6 21h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+<div aria-label="Project metadata" class="project-meta" role="list">
+<div class="meta-item" role="listitem">
+<svg aria-hidden="true" class="icon-meta" fill="none" viewbox="0 0 24 24">
+<path d="M8 7V3m8 4V3M5 11h14M6 21h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path>
+</svg>
             Fall 2025
           </div>
-          <div class="meta-item" role="listitem">
-            <svg class="icon-meta" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 20V10M18 20V4M6 20v-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+<div class="meta-item" role="listitem">
+<svg aria-hidden="true" class="icon-meta" fill="none" viewbox="0 0 24 24">
+<path d="M12 20V10M18 20V4M6 20v-6" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path>
+</svg>
             ASEN 5044 (Estimation) + ASEN 5014 (Control)
           </div>
-          <div class="meta-item" role="listitem">
-            <svg class="icon-meta" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+<div class="meta-item" role="listitem">
+<svg aria-hidden="true" class="icon-meta" fill="none" viewbox="0 0 24 24">
+<path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path>
+</svg>
             MATLAB + browser visualization
           </div>
-        </div>
-
-        <div class="kpi-grid" aria-label="Quick scan">
-          <div class="kpi-card">
-            <div class="kpi-label">Loop</div>
-            <div class="kpi-value">Truth → EKF → LQR</div>
-            <div class="kpi-note">Measurement dropouts + actuator saturation handled</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Estimator checks</div>
-            <div class="kpi-value">NEES / NIS</div>
-            <div class="kpi-note">Monte Carlo χ² consistency tests</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Interfaces</div>
-            <div class="kpi-value">Dynamics / sensors / actuation</div>
-            <div class="kpi-note">Discrete-time noisy measurements</div>
-          </div>
-        </div>
-
-        <div class="hero-actions">
-          <a class="btn-primary" href="#demo">View demo</a>
-          <a class="btn-secondary" href="#downloads">Read reports</a>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <!-- OVERVIEW -->
-  <section id="overview" class="section section-white">
-    <div class="container">
-      <h2 class="section-title">Project Overview</h2>
-
-      <div class="overview-grid">
-        <div class="overview-text">
-          <p class="lead">
+</div>
+<div aria-label="Quick scan" class="kpi-grid">
+<div class="kpi-card">
+<div class="kpi-label">Loop</div>
+<div class="kpi-value">Truth → EKF → LQR</div>
+<div class="kpi-note">Measurement dropouts + actuator saturation handled</div>
+</div>
+<div class="kpi-card">
+<div class="kpi-label">Estimator checks</div>
+<div class="kpi-value">NEES / NIS</div>
+<div class="kpi-note">Monte Carlo χ² consistency tests</div>
+</div>
+<div class="kpi-card">
+<div class="kpi-label">Interfaces</div>
+<div class="kpi-value">Dynamics / sensors / actuation</div>
+<div class="kpi-note">Discrete-time noisy measurements</div>
+</div>
+</div>
+<div class="hero-actions">
+<a class="btn-primary" href="#demo">View demo</a>
+<a class="btn-secondary" href="#downloads">Read reports</a>
+</div>
+</div>
+</div>
+</header>
+<!-- OVERVIEW -->
+<section class="section section-white" id="overview">
+<div class="container">
+<h2 class="section-title">Project Overview</h2>
+<div class="overview-grid">
+<div class="overview-text">
+<p class="lead">
             This project combines orbit determination and feedback control in one loop.
             I kept the physics intentionally simple (planar two-body gravity) so the work stays focused on measurement availability, noise assumptions, and estimator consistency checks.
           </p>
-
-          <div class="bullet-grid">
-            <div class="bullet">
-              <div class="bullet-dot" aria-hidden="true"></div>
-              <div class="bullet-text">
-                <div class="bullet-title">Navigation: EKF orbit determination</div>
-                <div>
+<div class="bullet-grid">
+<div class="bullet">
+<div aria-hidden="true" class="bullet-dot"></div>
+<div class="bullet-text">
+<div class="bullet-title">Navigation: EKF orbit determination</div>
+<div>
                   Estimate <code>[X, Ẋ, Y, Ẏ]</code> using noisy ground-station range, range-rate, and angle measurements.
                   When multiple stations are visible, stack measurements and use a block-diagonal <code>R</code>.
                 </div>
-              </div>
-            </div>
-
-            <div class="bullet">
-              <div class="bullet-dot" aria-hidden="true"></div>
-              <div class="bullet-text">
-                <div class="bullet-title">Control: LQR stabilization</div>
-                <div>
+</div>
+</div>
+<div class="bullet">
+<div aria-hidden="true" class="bullet-dot"></div>
+<div class="bullet-text">
+<div class="bullet-title">Control: LQR stabilization</div>
+<div>
                   Design an LQR gain on a linearized in-plane model and apply <code>u = −Kx̂</code> with saturation.
                   Initialize weights with Bryson’s rule and tune the response/effort trade.
                 </div>
-              </div>
-            </div>
-
-            <div class="bullet">
-              <div class="bullet-dot" aria-hidden="true"></div>
-              <div class="bullet-text">
-                <div class="bullet-title">Verification: Monte Carlo + consistency statistics</div>
-                <div>
+</div>
+</div>
+<div class="bullet">
+<div aria-hidden="true" class="bullet-dot"></div>
+<div class="bullet-text">
+<div class="bullet-title">Verification: Monte Carlo + consistency statistics</div>
+<div>
                   Run Monte Carlo trials and compare NEES/NIS to χ² bounds.
                   Use the results to diagnose process/measurement noise mismatch and to understand behavior during measurement gaps.
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="callout callout-tight" role="note" aria-label="Team context">
-            <div class="callout-body">
-              <div class="callout-icon" aria-hidden="true">i</div>
-              <div class="callout-text">
-                <div class="callout-title">Team context</div>
-                <div>
+</div>
+</div>
+</div>
+<div aria-label="Team context" class="callout callout-tight" role="note">
+<div class="callout-body">
+<div aria-hidden="true" class="callout-icon">i</div>
+<div class="callout-text">
+<div class="callout-title">Team context</div>
+<div>
                   The course reports were team submissions and include work from other students. This page focuses on the parts I personally implemented and tested.
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <aside class="overview-image-container" aria-label="Overview figure">
-          <figure class="overview-image">
-            <img class="figure-img" src="images/orbit-visibility-geometry.png" alt="Earth with ground stations and a satellite line-of-sight visibility concept diagram." />
-            <figcaption class="image-caption">
+</div>
+</div>
+</div>
+</div>
+<aside aria-label="Overview figure" class="overview-image-container">
+<figure class="overview-image">
+<img alt="Earth with ground stations and a satellite line-of-sight visibility concept diagram." class="figure-img" src="images/orbit-visibility-geometry.png"/>
+<figcaption class="image-caption">
               Ground-station visibility determines when measurements exist.
               <span class="muted">Image file: images/orbit-visibility-geometry.png</span>
-            </figcaption>
-          </figure>
-        </aside>
-      </div>
-
-      <div class="specs-grid" aria-label="Highlights">
-        <div class="detail-card">
-          <h3 class="detail-card-title">Estimator fundamentals</h3>
-          <p class="detail-card-content">
+</figcaption>
+</figure>
+</aside>
+</div>
+<div aria-label="Highlights" class="specs-grid">
+<div class="detail-card">
+<h3 class="detail-card-title">Estimator fundamentals</h3>
+<p class="detail-card-content">
             EKF with nonlinear propagation (<code>ode45</code>), Jacobians evaluated at the current estimate, covariance propagation with acceleration-process noise,
             stacked measurement updates, and a measurement dimension that changes with station visibility.
           </p>
-        </div>
-        <div class="detail-card">
-          <h3 class="detail-card-title">Control fundamentals</h3>
-          <p class="detail-card-content">
+</div>
+<div class="detail-card">
+<h3 class="detail-card-title">Control fundamentals</h3>
+<p class="detail-card-content">
             LQR designed about a nominal circular orbit, including a state-space model, gain synthesis, weight selection via Bryson’s rule,
             and saturation to a fixed maximum acceleration used in this demo.
           </p>
-        </div>
-        <div class="detail-card">
-          <h3 class="detail-card-title">Simulation workflow</h3>
-          <p class="detail-card-content">
+</div>
+<div class="detail-card">
+<h3 class="detail-card-title">Simulation workflow</h3>
+<p class="detail-card-content">
             Separate truth vs. filter-assumed noise, time-varying station visibility, Monte Carlo trials, and instrumentation to inspect errors, innovations, and control saturation.
           </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SETUP -->
-  <section id="setup" class="section">
-    <div class="container">
-      <h2 class="section-title">System Setup</h2>
-
-      <div class="two-col">
-        <div class="detail-card">
-          <h3 class="detail-card-title">Truth dynamics (planar two-body)</h3>
-          <p class="detail-card-content">
+</div>
+</div>
+</div>
+</section>
+<!-- SETUP -->
+<section class="section" id="setup">
+<div class="container">
+<h2 class="section-title">System Setup</h2>
+<div class="two-col">
+<div class="detail-card">
+<h3 class="detail-card-title">Truth dynamics (planar two-body)</h3>
+<p class="detail-card-content">
             The truth model propagates nonlinear two-body dynamics and injects disturbances as additive acceleration noise.
             I use the same acceleration interface for both disturbances and actuation so I can compare truth inputs against what the EKF assumes.
           </p>
-
-          <div class="equation-block" aria-label="Truth dynamics equation">
+<div aria-label="Truth dynamics equation" class="equation-block">
             \[
               \mathbf{x}=
               \begin{bmatrix}
@@ -258,163 +234,150 @@
             \]
             \[
               \begin{aligned}
-              \ddot X &= -\mu \frac{X}{r^3} + u_1 + w_1\\
-              \ddot Y &= -\mu \frac{Y}{r^3} + u_2 + w_2
+              \ddot X &amp;= -\mu \frac{X}{r^3} + u_1 + w_1\\
+              \ddot Y &amp;= -\mu \frac{Y}{r^3} + u_2 + w_2
               \end{aligned}
             \]
           </div>
-
-          <p class="detail-card-content">
+<p class="detail-card-content">
             In the estimation study, the truth trajectory is propagated with <code>ode45</code> and sampled at a fixed update period for EKF updates.
           </p>
-        </div>
-
-        <div class="detail-card">
-          <h3 class="detail-card-title">Measurements (ground stations)</h3>
-          <p class="detail-card-content">
+</div>
+<div class="detail-card">
+<h3 class="detail-card-title">Measurements (ground stations)</h3>
+<p class="detail-card-content">
             Each visible station returns range <code>ρ</code>, range-rate <code>ρ̇</code>, and angle <code>ϕ</code>.
             Visibility changes over time, so the measurement dimension changes too. When no stations are visible, the filter runs prediction-only and uncertainty grows; when measurements return, the filter tightens again.
           </p>
-
-          <div class="equation-block" aria-label="Measurement model equation">
+<div aria-label="Measurement model equation" class="equation-block">
             \[
               \begin{aligned}
-              \Delta X &= X - X_s(t), & \Delta Y &= Y - Y_s(t)\\
-              \Delta \dot X &= \dot X - \dot X_s(t), & \Delta \dot Y &= \dot Y - \dot Y_s(t)
+              \Delta X &amp;= X - X_s(t), &amp; \Delta Y &amp;= Y - Y_s(t)\\
+              \Delta \dot X &amp;= \dot X - \dot X_s(t), &amp; \Delta \dot Y &amp;= \dot Y - \dot Y_s(t)
               \end{aligned}
             \]
             \[
               \begin{aligned}
-              \rho &= \sqrt{\Delta X^2 + \Delta Y^2}\\
-              \dot \rho &= \frac{\Delta X\,\Delta \dot X + \Delta Y\,\Delta \dot Y}{\rho}\\
-              \phi &= \operatorname{atan2}(\Delta Y,\Delta X)
+              \rho &amp;= \sqrt{\Delta X^2 + \Delta Y^2}\\
+              \dot \rho &amp;= \frac{\Delta X\,\Delta \dot X + \Delta Y\,\Delta \dot Y}{\rho}\\
+              \phi &amp;= \operatorname{atan2}(\Delta Y,\Delta X)
               \end{aligned}
             \]
           </div>
-        </div>
-      </div>
-
-      <div class="figure-grid" aria-label="Setup figures">
-        <figure class="figure-card">
-          <img class="figure-img" src="images/orbit-visibility-geometry.png" alt="Concept diagram showing Earth, ground stations, and a satellite with an in-view line-of-sight region." />
-          <figcaption class="figure-caption">
+</div>
+</div>
+<div aria-label="Setup figures" class="figure-grid">
+<figure class="figure-card">
+<img alt="Concept diagram showing Earth, ground stations, and a satellite with an in-view line-of-sight region." class="figure-img" src="images/orbit-visibility-geometry.png"/>
+<figcaption class="figure-caption">
             Station geometry and line-of-sight.
             <span class="muted">images/orbit-visibility-geometry.png</span>
-          </figcaption>
-        </figure>
-
-        <figure class="figure-card">
-          <img class="figure-img" src="images/rt-control-axes.png" alt="Concept diagram showing radial and tangential control directions along an orbit." />
-          <figcaption class="figure-caption">
+</figcaption>
+</figure>
+<figure class="figure-card">
+<img alt="Concept diagram showing radial and tangential control directions along an orbit." class="figure-img" src="images/rt-control-axes.png"/>
+<figcaption class="figure-caption">
             Control directions used by the in-plane model (radial / tangential).
             <span class="muted">images/rt-control-axes.png</span>
-          </figcaption>
-        </figure>
-      </div>
-    </div>
-  </section>
-
-  <!-- EKF -->
-  <section id="ekf" class="section section-white">
-    <div class="container">
-      <h2 class="section-title">Extended Kalman Filter (EKF)</h2>
-
-      <div class="algo-grid" aria-label="EKF algorithm">
-        <div class="algo-card">
-          <div class="algo-header">
-            <div class="algo-step">1</div>
-            <h3 class="algo-title">Predict</h3>
-          </div>
-          <p class="algo-text">
+</figcaption>
+</figure>
+</div>
+</div>
+</section>
+<!-- EKF -->
+<section class="section section-white" id="ekf">
+<div class="container">
+<h2 class="section-title">Extended Kalman Filter (EKF)</h2>
+<div aria-label="EKF algorithm" class="algo-grid">
+<div class="algo-card">
+<div class="algo-header">
+<div class="algo-step">1</div>
+<h3 class="algo-title">Predict</h3>
+</div>
+<p class="algo-text">
             Propagate the nonlinear state estimate forward with the dynamics. Evaluate the dynamics Jacobian at the most recent corrected estimate.
           </p>
-          <div class="equation-block" aria-label="EKF predict equations">
+<div aria-label="EKF predict equations" class="equation-block">
             \[
               \hat{\mathbf{x}}^-_{k+1}=f_d\!\left(\hat{\mathbf{x}}^+_k\right),
               \qquad
               A_k=\left.\frac{\partial f}{\partial \mathbf{x}}\right|_{\hat{\mathbf{x}}^+_k}
             \]
           </div>
-        </div>
-
-        <div class="algo-card">
-          <div class="algo-header">
-            <div class="algo-step">2</div>
-            <h3 class="algo-title">Propagate covariance</h3>
-          </div>
-          <p class="algo-text">
+</div>
+<div class="algo-card">
+<div class="algo-header">
+<div class="algo-step">2</div>
+<h3 class="algo-title">Propagate covariance</h3>
+</div>
+<p class="algo-text">
             Propagate covariance with the discrete transition and an acceleration-noise mapping.
             Use NEES/NIS behavior over Monte Carlo trials to guide noise tuning.
           </p>
-          <div class="equation-block" aria-label="EKF covariance propagation equation">
+<div aria-label="EKF covariance propagation equation" class="equation-block">
             \[
               P^-_{k+1}=\tilde F_k P^+_k \tilde F_k^{\mathsf{T}} + \tilde\Omega_k Q_{KF}\tilde\Omega_k^{\mathsf{T}}
             \]
           </div>
-        </div>
-
-        <div class="algo-card">
-          <div class="algo-header">
-            <div class="algo-step">3</div>
-            <h3 class="algo-title">Correct</h3>
-          </div>
-          <p class="algo-text">
+</div>
+<div class="algo-card">
+<div class="algo-header">
+<div class="algo-step">3</div>
+<h3 class="algo-title">Correct</h3>
+</div>
+<p class="algo-text">
             Stack measurements from all visible stations, build a block-diagonal <code>R</code>, and apply the standard EKF update.
           </p>
-          <div class="equation-block" aria-label="EKF correction equations">
+<div aria-label="EKF correction equations" class="equation-block">
             \[
               \tilde{\mathbf{y}}_k=\mathbf{y}_k-h\!\left(\hat{\mathbf{x}}^-_k\right)
             \]
             \[
               \begin{aligned}
-              S_k &= H_k P^-_k H_k^{\mathsf{T}} + R_k\\
-              K_k &= P^-_k H_k^{\mathsf{T}} S_k^{-1}\\
-              \hat{\mathbf{x}}^+_k &= \hat{\mathbf{x}}^-_k + K_k\tilde{\mathbf{y}}_k\\
-              P^+_k &= (I-K_k H_k)P^-_k
+              S_k &amp;= H_k P^-_k H_k^{\mathsf{T}} + R_k\\
+              K_k &amp;= P^-_k H_k^{\mathsf{T}} S_k^{-1}\\
+              \hat{\mathbf{x}}^+_k &amp;= \hat{\mathbf{x}}^-_k + K_k\tilde{\mathbf{y}}_k\\
+              P^+_k &amp;= (I-K_k H_k)P^-_k
               \end{aligned}
             \]
           </div>
-        </div>
-      </div>
-
-      <div class="detail-card">
-        <h3 class="detail-card-title">Implementation details that actually matter</h3>
-        <div class="two-col">
-          <div>
-            <p class="detail-card-content">
-              <strong>Stacking:</strong> if <em>m</em> stations are visible, the measurement vector is 3m×1. The indexing/order needs to stay consistent across <code>y</code>, <code>H</code>, and <code>R</code>.
+</div>
+</div>
+<div class="detail-card">
+<h3 class="detail-card-title">Implementation details that actually matter</h3>
+<div class="two-col">
+<div>
+<p class="detail-card-content">
+<strong>Stacking:</strong> if <em>m</em> stations are visible, the measurement vector is 3m×1. The indexing/order needs to stay consistent across <code>y</code>, <code>H</code>, and <code>R</code>.
             </p>
-            <p class="detail-card-content">
-              <strong>Linearization:</strong> If your Jacobians don’t match what you propagate, the EKF gets unreliable fast. I evaluate Jacobians at the corrected estimate each step.
+<p class="detail-card-content">
+<strong>Linearization:</strong> If your Jacobians don’t match what you propagate, the EKF gets unreliable fast. I evaluate Jacobians at the corrected estimate each step.
             </p>
-          </div>
-          <div>
-            <p class="detail-card-content">
-              <strong>Dropouts:</strong> Visibility gaps aren’t an edge case — they’re normal. During gaps, uncertainty grows; after gaps, measurements pull the estimate back in.
+</div>
+<div>
+<p class="detail-card-content">
+<strong>Dropouts:</strong> Visibility gaps aren’t an edge case — they’re normal. During gaps, uncertainty grows; after gaps, measurements pull the estimate back in.
             </p>
-            <p class="detail-card-content">
-              <strong>Noise assumptions:</strong> I keep separate truth vs. filter-assumed noise so I can test mismatch and see how NEES/NIS changes.
+<p class="detail-card-content">
+<strong>Noise assumptions:</strong> I keep separate truth vs. filter-assumed noise so I can test mismatch and see how NEES/NIS changes.
             </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- LQR -->
-  <section id="lqr" class="section">
-    <div class="container">
-      <h2 class="section-title">Linear Quadratic Regulator (LQR)</h2>
-
-      <div class="two-col">
-        <div class="detail-card">
-          <h3 class="detail-card-title">Linearized perturbation model</h3>
-          <p class="detail-card-content">
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- LQR -->
+<section class="section" id="lqr">
+<div class="container">
+<h2 class="section-title">Linear Quadratic Regulator (LQR)</h2>
+<div class="two-col">
+<div class="detail-card">
+<h3 class="detail-card-title">Linearized perturbation model</h3>
+<p class="detail-card-content">
             The controller is designed by linearizing about a nominal circular orbit of radius <code>r₀</code>.
             I express the state as small in-plane perturbations and design a two-axis control input.
           </p>
-
-          <div class="equation-block" aria-label="LQR state definition">
+<div aria-label="LQR state definition" class="equation-block">
             \[
               \mathbf{x}=
               \begin{bmatrix}
@@ -427,1970 +390,628 @@
               \end{bmatrix}
             \]
           </div>
-
-          <p class="detail-card-content">
+<p class="detail-card-content">
             With mean motion <code>n = sqrt(μ / r₀³)</code>, one common form of the in-plane linearization is:
           </p>
-
-          <div class="equation-block" aria-label="Linearized dynamics">
+<div aria-label="Linearized dynamics" class="equation-block">
             \[
               \begin{aligned}
-              \dot{\delta r} &= \delta \dot r\\
-              \dot{\delta \dot r} &= 3n^2 \delta r + 2 r_0 n\,\delta \dot\theta + \delta u_r\\
-              \dot{\delta \theta} &= \delta \dot\theta\\
-              \dot{\delta \dot\theta} &= -\frac{2n}{r_0}\delta \dot r + \frac{1}{r_0}\delta u_t
+              \dot{\delta r} &amp;= \delta \dot r\\
+              \dot{\delta \dot r} &amp;= 3n^2 \delta r + 2 r_0 n\,\delta \dot\theta + \delta u_r\\
+              \dot{\delta \theta} &amp;= \delta \dot\theta\\
+              \dot{\delta \dot\theta} &amp;= -\frac{2n}{r_0}\delta \dot r + \frac{1}{r_0}\delta u_t
               \end{aligned}
             \]
           </div>
-        </div>
-
-        <div class="detail-card">
-          <h3 class="detail-card-title">Cost, weights, and saturation</h3>
-          <p class="detail-card-content">
+</div>
+<div class="detail-card">
+<h3 class="detail-card-title">Cost, weights, and saturation</h3>
+<p class="detail-card-content">
             LQR minimizes state deviation and control effort and returns a stabilizing gain <code>K</code>:
           </p>
-
-          <div class="equation-block" aria-label="LQR objective">
+<div aria-label="LQR objective" class="equation-block">
             \[
               J=\int_{0}^{\infty}\left(\mathbf{x}^{\mathsf{T}}Q\mathbf{x}+\mathbf{u}^{\mathsf{T}}R\mathbf{u}\right)\,dt,
               \qquad
               \mathbf{u}=-K\hat{\mathbf{x}}
             \]
           </div>
-
-          <p class="detail-card-content">
+<p class="detail-card-content">
             I initialize <code>Q</code> and <code>R</code> with Bryson’s rule and tune the overall trade with a scalar multiplier.
             The commanded acceleration is saturated to a fixed limit used for this demo (0.01 g).
           </p>
-
-          <div class="equation-block" aria-label="Bryson weighting">
+<div aria-label="Bryson weighting" class="equation-block">
             \[
               Q=\operatorname{diag}\!\left(\frac{1}{x_{\max}^2}\right),
               \qquad
               R=\rho\,\operatorname{diag}\!\left(\frac{1}{u_{\max}^2}\right)
             \]
           </div>
-        </div>
-      </div>
-
-      <div class="detail-card">
-        <h3 class="detail-card-title">Controller evaluation</h3>
-        <p class="detail-card-content">
+</div>
+</div>
+<div class="detail-card">
+<h3 class="detail-card-title">Controller evaluation</h3>
+<p class="detail-card-content">
           I compare designs using time response and integrated control effort under the same acceleration limit.
           Saturation matters: once the limiter engages, performance is constrained by available acceleration rather than feedback gain.
         </p>
-      </div>
-    </div>
-  </section>
-
-  <!-- VERIFICATION -->
-  <section id="verification" class="section section-white">
-    <div class="container">
-      <h2 class="section-title">Verification &amp; Testing</h2>
-
-      <div class="specs-grid">
-        <div class="detail-card">
-          <h3 class="detail-card-title">NEES / NIS consistency</h3>
-          <p class="detail-card-content">
+</div>
+</div>
+</section>
+<!-- VERIFICATION -->
+<section class="section section-white" id="verification">
+<div class="container">
+<h2 class="section-title">Verification &amp; Testing</h2>
+<div class="specs-grid">
+<div class="detail-card">
+<h3 class="detail-card-title">NEES / NIS consistency</h3>
+<p class="detail-card-content">
             I evaluate filter consistency using NEES (state error) and NIS (innovation) and compare them to χ² bounds.
             These checks help diagnose under/overconfident covariance tuning across many trials.
           </p>
-        </div>
-
-        <div class="detail-card">
-          <h3 class="detail-card-title">Monte Carlo setup</h3>
-          <p class="detail-card-content">
+</div>
+<div class="detail-card">
+<h3 class="detail-card-title">Monte Carlo setup</h3>
+<p class="detail-card-content">
             I randomize the initial truth state around the filter’s initial estimate using the initial covariance and run repeated trials. This exposes failure modes that a single run can hide.
           </p>
-        </div>
-
-        <div class="detail-card">
-          <h3 class="detail-card-title">Bounded actuation</h3>
-          <p class="detail-card-content">
+</div>
+<div class="detail-card">
+<h3 class="detail-card-title">Bounded actuation</h3>
+<p class="detail-card-content">
             The controller command is saturated to a fixed acceleration capability (0.01 g in this demo). This is a simplification — it’s a clean way to compare controllers without implying a flight-realistic thruster model.
           </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- IMPLEMENTATION -->
-  <section id="implementation" class="section">
-    <div class="container">
-      <h2 class="section-title">Implementation</h2>
-
-      <!-- Removed the "What this is (and isn’t)" panel -->
-      <div class="one-col">
-        <div class="detail-card">
-          <h3 class="detail-card-title">What’s implemented</h3>
-          <p class="detail-card-content">
+</div>
+</div>
+</div>
+</section>
+<!-- IMPLEMENTATION -->
+<section class="section" id="implementation">
+<div class="container">
+<h2 class="section-title">Implementation</h2>
+<!-- Removed the "What this is (and isn’t)" panel -->
+<div class="one-col">
+<div class="detail-card">
+<h3 class="detail-card-title">What’s implemented</h3>
+<p class="detail-card-content">
             This project page documents a coupled estimation + control loop with time-varying measurement availability. The algorithms were developed in MATLAB; this site presents the results and links to the supporting materials.
           </p>
-          <ul class="list">
-            <li>Planar two-body truth propagation with injected acceleration disturbance</li>
-            <li>Multi-station measurement model with visibility-driven dropouts</li>
-            <li>EKF predict/update with stacked measurements</li>
-            <li>LQR control with saturation</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-    <!-- DEMO -->
-  <section id="demo" class="section section-white">
-    <div class="container">
-      <h2 class="section-title">Interactive Demo</h2>
-    </div>
-
-    <div class="demo-bleed" aria-label="Interactive orbit EKF + LQR demo">
-      <iframe
-        id="orbitSimFrame"
-        class="orbit-sim-frame"
-        title="Orbit EKF + LQR Interactive Demo"
-        loading="lazy"
-        scrolling="no"
-      ></iframe>
-    </div>
-
-    <div class="container">
-      <div class="demo-actions">
-        <a class="btn-primary btn-inline" href="#downloads">Reports</a>
-        <a class="btn-secondary btn-inline" href="https://github.com/jack-huston" target="_blank" rel="noopener">GitHub</a>
-      </div>
-    </div>
-
-    <script>
-      (function () {
-        const frame = document.getElementById('orbitSimFrame');
-        if (!frame) return;
-
-        const simDoc = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>2D Orbit + EKF + Linear Control Demo</title>
-    <style>
-/* inlined orbit-sim.css */
-/* orbit-sim.css - DSN-ish light theme with subtle space vibes */
-:root {
-  --bg: #0b1020;
-  --panel: rgba(255, 255, 255, 0.86);
-  --panel2: rgba(255, 255, 255, 0.78);
-  --text: #0b1020;
-  --muted: rgba(11, 16, 32, 0.65);
-  --line: rgba(11, 16, 32, 0.14);
-  --truth: #1b6eea;
-  --est: #ff7a18;
-  --meas: #10b981;
-  --ctrl: #7c3aed;
-  --warn: #b45309;
-  --danger: #dc2626;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  --radius: 18px;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
-  --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
-    Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  color-scheme: dark;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-  font-family: var(--sans);
-  color: rgba(255, 255, 255, 0.92);
-  background: radial-gradient(
-      1200px 800px at 20% 10%,
-      rgba(27, 110, 234, 0.18),
-      transparent 60%
-    ),
-    radial-gradient(
-      900px 700px at 80% 20%,
-      rgba(255, 122, 24, 0.16),
-      transparent 55%
-    ),
-    radial-gradient(
-      1000px 900px at 60% 100%,
-      rgba(16, 185, 129, 0.12),
-      transparent 60%
-    ),
-    linear-gradient(180deg, #070b16, #0b1020 40%, #070b16);
-}
-
-.topbar {
-  padding: 16px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.brand-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: radial-gradient(
-      circle at 35% 30%,
-      rgba(255, 255, 255, 0.9),
-      rgba(255, 255, 255, 0.25) 25%,
-      rgba(255, 255, 255, 0) 55%
-    ),
-    conic-gradient(
-      from 140deg,
-      rgba(27, 110, 234, 0.85),
-      rgba(255, 122, 24, 0.85),
-      rgba(16, 185, 129, 0.85),
-      rgba(27, 110, 234, 0.85)
-    );
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-}
-
-.brand-title {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-}
-
-.brand-sub {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.72);
-  margin-top: 2px;
-}
-
-.statusline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.pill {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  user-select: none;
-}
-
-.legacy-pill { display: none; }
-
-.pill.warn {
-  background: rgba(180, 83, 9, 0.18);
-  border-color: rgba(180, 83, 9, 0.25);
-}
-
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  display: inline-block;
-}
-
-.dot-truth {
-  background: var(--truth);
-}
-
-.dot-est {
-  background: var(--est);
-}
-
-.dot-meas {
-  background: var(--meas);
-}
-
-.dot-ctrl {
-  background: var(--ctrl);
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: 1.25fr 0.75fr;
-  grid-template-rows: auto auto;
-  gap: 16px;
-  padding: 0 18px 16px;
-  align-items: start;
-}
-
-.card {
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  backdrop-filter: blur(10px);
-}
-
-.card-head {
-  padding: 12px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  gap: 12px;
-}
-
-.card-title {
-  font-size: 13px;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.card-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.orbit-card {
-  grid-column: 1 / 2;
-  grid-row: 1 / 2;
-}
-
-.controls-card {
-  grid-column: 2 / 3;
-  grid-row: 1 / 2;
-}
-
-.plots-card {
-  grid-column: 1 / 3;
-  grid-row: 2 / 3;
-}
-
-.orbit-wrap {
-  position: relative;
-  height: min(62vh, 620px);
-  min-height: 420px;
-  background: radial-gradient(
-      900px 500px at 50% 30%,
-      rgba(255, 255, 255, 0.05),
-      transparent 60%
-    ),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.12));
-}
-
-#orbitCanvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-/* --- Added (new): relative position + covariance ellipse panel --- */
-.ellipse-wrap {
-  padding: 10px 14px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.ellipse-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.ellipse-title {
-  font-size: 12px;
-  font-weight: 750;
-  color: rgba(255, 255, 255, 0.86);
-  letter-spacing: 0.35px;
-  text-transform: uppercase;
-}
-
-.ellipse-scale {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
-  white-space: nowrap;
-}
-
-#ellipseCanvas {
-  width: 100%;
-  height: 220px;
-  display: block;
-  border-radius: 14px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-}
-/* --- End added --- */
-
-.hud {
-  position: absolute;
-  left: 12px;
-  top: 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 14px;
-  padding: 10px 10px;
-  max-width: calc(100% - 24px);
-}
-
-.hud-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.hud-item {
-  min-width: 92px;
-}
-
-.hud-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.7);
-  letter-spacing: 0.35px;
-  text-transform: uppercase;
-}
-
-.hud-value {
-  font-family: var(--mono);
-  font-size: 13px;
-  margin-top: 2px;
-}
-
-.hint {
-  padding: 10px 14px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.72);
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.hint.small {
-  font-size: 11px;
-}
-
-.controls {
-  padding: 12px 14px 14px;
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.row {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.row.tight {
-  margin-bottom: 0;
-}
-
-.btn {
-  appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.92);
-  padding: 9px 12px;
-  border-radius: 12px;
-  font-weight: 650;
-  font-size: 13px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.btn:active {
-  transform: translateY(1px);
-}
-
-.btn.primary {
-  background: rgba(27, 110, 234, 0.22);
-  border-color: rgba(27, 110, 234, 0.34);
-}
-
-.btn.primary:hover {
-  background: rgba(27, 110, 234, 0.28);
-}
-
-.btn.danger {
-  background: rgba(220, 38, 38, 0.22);
-  border-color: rgba(220, 38, 38, 0.34);
-}
-
-.btn.danger:hover {
-  background: rgba(220, 38, 38, 0.28);
-}
-
-.speedbar {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* Pinned sim control bar inside the Simulation/Controls card (keeps IDs & layout elsewhere unchanged) */
-.simbarwrap {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(7, 11, 22, 0.92);
-  backdrop-filter: blur(10px);
-}
-
-.simbarwrap .row {
-  margin-bottom: 0;
-}
-
-.speedbtn {
-  padding: 8px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-}
-
-.speedbtn.active {
-  background: rgba(255, 122, 24, 0.2);
-  border-color: rgba(255, 122, 24, 0.32);
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
-  gap: 10px;
-}
-
-.grid3 {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.field span {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.72);
-  letter-spacing: 0.25px;
-  text-transform: uppercase;
-}
-
-.field input,
-.field select {
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(0, 0, 0, 0.34);
-  color: rgba(255, 255, 255, 0.95);
-  padding: 9px 10px;
-  border-radius: 12px;
-  font-family: var(--mono);
-  font-size: 13px;
-  outline: none;
-  color-scheme: dark;
-}
-
-.field input[type="range"] {
-  padding: 0;
-  height: 26px;
-}
-
-.field select {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  padding-right: 36px;
-  background-image: linear-gradient(
-      45deg,
-      transparent 50%,
-      rgba(255, 255, 255, 0.7) 50%
-    ),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.7) 50%, transparent 50%);
-  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
-  background-size: 6px 6px, 6px 6px;
-  background-repeat: no-repeat;
-}
-
-.field input:focus,
-.field select:focus {
-  border-color: rgba(255, 255, 255, 0.38);
-}
-
-.field input:disabled,
-.field select:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.bounds {
-  margin-top: -2px;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.58);
-  letter-spacing: 0.15px;
-}
-
-.section {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.section.orbit-ic-section {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
-}
-
-.section-title {
-  font-size: 12px;
-  font-weight: 750;
-  color: rgba(255, 255, 255, 0.86);
-  margin-bottom: 8px;
-  letter-spacing: 0.35px;
-  text-transform: uppercase;
-}
-
-.subhead {
-  margin-top: 10px;
-  font-size: 11px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.78);
-  letter-spacing: 0.25px;
-  text-transform: uppercase;
-}
-
-.micro {
-  margin-top: 8px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
-  line-height: 1.35;
-}
-
-
-.muted {
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.warnnote {
-  color: rgba(255, 255, 255, 0.86);
-  background: rgba(180, 83, 9, 0.16);
-  border: 1px solid rgba(180, 83, 9, 0.25);
-  padding: 8px 10px;
-  border-radius: 12px;
-}
-
-.diag-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.tabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.tab {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.86);
-  padding: 8px 10px;
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.tab.active {
-  background: rgba(255, 122, 24, 0.2);
-  border-color: rgba(255, 122, 24, 0.32);
-}
-
-.windowctl {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.windowctl span {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.75);
-  letter-spacing: 0.2px;
-  text-transform: uppercase;
-}
-
-.windowctl select {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(0, 0, 0, 0.3);
-  color: rgba(255, 255, 255, 0.95);
-  padding: 7px 34px 7px 10px;
-  border-radius: 999px;
-  font-family: var(--mono);
-  font-size: 12px;
-  outline: none;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  color-scheme: dark;
-  background-image: linear-gradient(
-      45deg,
-      transparent 50%,
-      rgba(255, 255, 255, 0.7) 50%
-    ),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.7) 50%, transparent 50%);
-  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
-  background-size: 6px 6px, 6px 6px;
-  background-repeat: no-repeat;
-}
-
-.tabpanes {
-  padding: 12px 14px 14px;
-}
-
-.pane {
-  display: none;
-}
-
-.pane.active {
-  display: block;
-}
-
-.plotgrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-
-.plotgrid.plotgrid-meas {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.plotgrid.plotgrid-nees {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.plotcard {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 16px;
-  padding: 10px 10px 8px;
-  overflow: hidden;
-}
-
-.plotlabel {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.75);
-  letter-spacing: 0.2px;
-  margin-bottom: 8px;
-}
-
-.plot {
-  width: 100%;
-  height: 180px;
-  display: block;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.22);
-}
-
-.plotcard.ctrl-status {
-  display: flex;
-  flex-direction: column;
-}
-
-.statusbox {
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(0, 0, 0, 0.2);
-  padding: 12px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 180px;
-}
-
-.statusbox.ok {
-  background: radial-gradient(
-      260px 140px at 15% 20%,
-      rgba(16, 185, 129, 0.16),
-      transparent 55%
-    ),
-    rgba(0, 0, 0, 0.2);
-  border-color: rgba(16, 185, 129, 0.25);
-}
-
-.statusbox.bad {
-  background: radial-gradient(
-      260px 140px at 15% 20%,
-      rgba(220, 38, 38, 0.16),
-      transparent 55%
-    ),
-    rgba(0, 0, 0, 0.2);
-  border-color: rgba(220, 38, 38, 0.28);
-}
-
-.statusbox-left {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.statusbox-title {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.35px;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.statusbox-value {
-  font-size: 22px;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-}
-
-.statusbox-right {
-  text-align: right;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.statusbox-sub {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
-  letter-spacing: 0.2px;
-}
-
-.statusbox-mono {
-  font-family: var(--mono);
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.notice {
-  margin-bottom: 12px;
-  padding: 12px 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: radial-gradient(
-      420px 180px at 20% 20%,
-      rgba(124, 58, 237, 0.14),
-      transparent 60%
-    ),
-    rgba(0, 0, 0, 0.2);
-}
-
-.notice-title {
-  font-weight: 850;
-  letter-spacing: 0.2px;
-  margin-bottom: 6px;
-}
-
-.notice-body {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.78);
-  line-height: 1.35;
-}
-
-.notice-actions {
-  margin-top: 10px;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.stationboard-wrap {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.stationboard-title {
-  font-size: 12px;
-  font-weight: 750;
-  color: rgba(255, 255, 255, 0.86);
-  letter-spacing: 0.35px;
-  text-transform: uppercase;
-  margin-bottom: 10px;
-}
-
-.stationboard {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 8px;
-}
-
-.station-tile {
-  --sc: rgba(255, 255, 255, 0.85);
-  position: relative;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(0, 0, 0, 0.18);
-  overflow: hidden;
-  padding: 8px 6px 8px 6px;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
-  min-height: 110px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
-  text-align: center;
-}
-
-.station-icon {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  color: rgba(255, 255, 255, 0.55);
-  opacity: 0.85;
-  position: relative;
-}
-
-.station-icon svg {
-  width: 26px;
-  height: 26px;
-  display: block;
-}
-
-.station-signal {
-  width: 22px;
-  height: 0;
-  border-top: 2px dashed rgba(255, 255, 255, 0.22);
-  margin-top: -2px;
-  opacity: 0.55;
-}
-
-.station-id {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.station-state {
-  font-family: var(--mono);
-  font-weight: 850;
-  letter-spacing: 0.25px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
-  margin-top: 2px;
-}
-
-.station-tile.active {
-  background: radial-gradient(
-      220px 120px at 30% 25%,
-      color-mix(in srgb, var(--sc) 18%, transparent),
-      transparent 60%
-    ),
-    rgba(0, 0, 0, 0.22);
-  border-color: color-mix(in srgb, var(--sc) 55%, rgba(255, 255, 255, 0.12));
-}
-
-.station-tile.active .station-icon {
-  color: var(--sc);
-  opacity: 1;
-  filter: drop-shadow(
-    0 6px 12px color-mix(in srgb, var(--sc) 45%, transparent)
-  );
-}
-
-.station-tile.active .station-signal {
-  border-top-color: color-mix(in srgb, var(--sc) 75%, transparent);
-  opacity: 0.85;
-}
-
-.station-tile.active .station-state {
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.stationboard-micro {
-  margin-top: 10px;
-}
-
-.footer {
-  padding: 10px 18px 16px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.62);
-}
-
-@media (max-width: 1050px) {
-  .layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
-  }
-
-  .orbit-card {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .controls-card {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .plots-card {
-    grid-column: 1;
-    grid-row: 3;
-  }
-
-  .plotgrid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .plotgrid.plotgrid-meas {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .plotgrid.plotgrid-nees {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .stationboard {
-    grid-template-columns: repeat(6, 1fr);
-  }
-}
-
-@media (max-width: 720px) {
-  .stationboard {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-@media (max-width: 560px) {
-  .plotgrid {
-    grid-template-columns: 1fr;
-  }
-
-  .plotgrid.plotgrid-meas {
-    grid-template-columns: 1fr;
-  }
-
-  .plotgrid.plotgrid-nees {
-    grid-template-columns: 1fr;
-  }
-
-  .orbit-wrap {
-    min-height: 380px;
-  }
-
-  /* Keep ellipse readable on small screens */
-  #ellipseCanvas {
-    height: 200px;
-  }
-
-  .stationboard {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-
-/* --- Portfolio-embed overrides --- */
-/* Layout: left column (Orbit, Relative), right column (Controls spans both), bottom full-width plots */
-.layout {
-  grid-template-columns: 1.05fr 0.95fr;
-  grid-template-rows: auto auto auto;
-  align-items: stretch;
-}
-
-.orbit-card { grid-column: 1 / 2; grid-row: 1 / 2; }
-.rel-card   { grid-column: 1 / 2; grid-row: 2 / 3; }
-.controls-card { grid-column: 2 / 3; grid-row: 1 / 3; display: flex; flex-direction: column; }
-.plots-card { grid-column: 1 / 3; grid-row: 3 / 4; }
-
-/* Make the two left panels visually match (card spacing already handled by grid gap) */
-.rel-wrap {
-  padding: 10px 14px 14px;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.rel-card .card-head { border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
-
-/* Controls area: fixed height within the spanning card + internal scroll */
-.controls {
-  flex: 1 1 auto;
-  min-height: 0;             /* required for overflow in flex children */
-  overflow: auto;
-  padding-top: 12px;
-}
-
-/* Accordion header styling (standard chevron-on-right) */
-.controls .section {
-  margin-top: 10px;
-  padding-top: 0;
-  border-top: 0;
-}
-
-.section-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-
-  padding: 10px 12px;
-  border-radius: 14px;
-
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.86);
-
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.35px;
-  text-transform: uppercase;
-
-  cursor: pointer;
-  user-select: none;
-}
-
-.section-toggle:hover { background: rgba(255, 255, 255, 0.11); }
-.section-toggle:active { transform: translateY(1px); }
-
-.section-toggle-label { padding-right: 6px; }
-
-/* Chevron rotates based on aria-expanded */
-.section-toggle-chevron {
-  opacity: 0.85;
-  font-size: 18px;
-  line-height: 1;
-  transform: rotate(0deg);
-  transition: transform 0.12s ease;
-}
-.section-toggle[aria-expanded="true"] .section-toggle-chevron {
-  transform: rotate(90deg);
-}
-
-/* Body box under header, with tight spacing */
-.section-body {
-  margin-top: 8px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(0, 0, 0, 0.18);
-
-  overflow: auto;            /* body itself can scroll when constrained */
-}
-
-.section.collapsed .section-body { display: none; }
-
-/* Remove old title margin so nothing clips */
-.section-title { margin-bottom: 0; }
-
-/* Slightly tighten subhead spacing to avoid "too much margin" look */
-.subhead { margin-top: 8px; }
-.micro { margin-top: 8px; }
-
-/* Mobile: stack columns */
-@media (max-width: 980px) {
-  .layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto;
-  }
-  .orbit-card { grid-column: 1 / 2; grid-row: 1 / 2; }
-  .rel-card   { grid-column: 1 / 2; grid-row: 2 / 3; }
-  .controls-card { grid-column: 1 / 2; grid-row: 3 / 4; }
-  .plots-card { grid-column: 1 / 2; grid-row: 4 / 5; }
-  .controls { max-height: none; }
-}
-</style>
-  </head>
-  <body>
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true"></div>
-        <div class="brand-text">
-          <div class="brand-title">Orbit Nav Demo</div>
-          <div class="brand-sub">2D ECI · RK4 truth · EKF · 12 rotating ground stations · linear control</div>
-        </div>
-      </div>
-      <div class="statusline">
-
-
-
-        <div class="pill warn" id="pillDisturb">Disturbance OFF</div>
-        <div class="pill warn" id="pillSat">Saturation OK</div>
-        <div class="pill warn" id="pillImpact" style="display:none;">IMPACT</div>
-      </div>
-    </header>
-
-    <main class="layout">
-      <section class="card orbit-card">
-        <div class="card-head">
-          <div class="card-title">Orbit View</div>
-          <div class="card-actions">
-            <button class="btn" id="btnResetView" type="button">Reset View</button>
-            <button class="btn" id="btnZoomCraft" type="button">Zoom to Craft</button>
-          </div>
-        </div>
-
-        <div class="orbit-wrap">
-          <canvas id="orbitCanvas" aria-label="Orbit view canvas"></canvas>
-
-          <div class="hud">
-            <div class="hud-row">
-              <div class="hud-item">
-                <div class="hud-label">t (s)</div>
-                <div class="hud-value" id="hudTime">0.00</div>
-              </div>
-              <div class="hud-item">
-                <div class="hud-label">step</div>
-                <div class="hud-value" id="hudStep">0</div>
-              </div>
-              <div class="hud-item">
-                <div class="hud-label">Δt (s)</div>
-                <div class="hud-value" id="hudDt">10</div>
-              </div>
-              <div class="hud-item">
-                <div class="hud-label">visible</div>
-                <div class="hud-value" id="hudVisible">0</div>
-              </div>
-            </div>
-            <div class="hud-row">
-              <div class="hud-item">
-                <div class="hud-label">mode</div>
-                <div class="hud-value" id="hudMode">Paused</div>
-              </div>
-              <div class="hud-item">
-                <div class="hud-label">speed</div>
-                <div class="hud-value" id="hudSpeed">100×</div>
-              </div>
-              <div class="hud-item">
-                <div class="hud-label">NEES</div>
-                <div class="hud-value" id="hudNees">–</div>
-              </div>
-              <div class="hud-item">
-                <div class="hud-label">NIS</div>
-                <div class="hud-value" id="hudNis">–</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-
-        <div class="hint"> Pan: drag · Zoom: scroll · Space: Run/Pause · R: Reset · S: Step </div>
-      </section>
-
-            <section class="card rel-card">
-        <div class="card-head">
-          <div class="card-title">Relative Position &amp; Covariance</div>
-        </div>
-        <div class="rel-wrap">
-                  <div class="ellipse-wrap">
-                    <div class="ellipse-head">            <div class="ellipse-scale" id="ellipseScale">–</div>
-                    </div>
-                    <canvas id="ellipseCanvas" aria-label="Relative position and covariance ellipse plot"></canvas>
-                    <div class="micro" id="ellipseHelp">
+<ul class="list">
+<li>Planar two-body truth propagation with injected acceleration disturbance</li>
+<li>Multi-station measurement model with visibility-driven dropouts</li>
+<li>EKF predict/update with stacked measurements</li>
+<li>LQR control with saturation</li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+<!-- DEMO -->
+<section class="section section-white" id="demo">
+<div class="container">
+<h2 class="section-title">Interactive Demo</h2>
+</div>
+<div aria-label="Interactive orbit EKF + LQR demo" class="demo-bleed"><div class="orbit-sim"> <header class="topbar">
+<div class="brand">
+<div class="brand-text">
+<div class="brand-title">Demonstration of Extended Kalman Filter</div>
+<div class="brand-sub">2D ECI · RK4  · EKF · 12 rotating ground stations · Linear Quadratic Controller</div>
+</div>
+</div>
+<div class="statusline">
+<div class="pill warn" id="pillDisturb">Disturbance OFF</div>
+<div class="pill warn" id="pillSat">Saturation OK</div>
+<div class="pill warn" id="pillImpact" style="display:none;">IMPACT</div>
+</div>
+</header>
+<main class="layout">
+<section class="card orbit-card">
+<div class="card-head">
+<div class="card-title">Orbit View</div>
+<div class="card-actions">
+<button class="btn" id="btnResetView" type="button">Reset View</button>
+<button class="btn" id="btnZoomCraft" type="button">Zoom to Craft</button>
+</div>
+</div>
+<div class="orbit-wrap">
+<canvas aria-label="Orbit view canvas" id="orbitCanvas"></canvas>
+<div class="hud">
+<div class="hud-row">
+<div class="hud-item">
+<div class="hud-label">t (s)</div>
+<div class="hud-value" id="hudTime">0.00</div>
+</div>
+<div class="hud-item">
+<div class="hud-label">step</div>
+<div class="hud-value" id="hudStep">0</div>
+</div>
+<div class="hud-item">
+<div class="hud-label">Δt (s)</div>
+<div class="hud-value" id="hudDt">10</div>
+</div>
+<div class="hud-item">
+<div class="hud-label">visible</div>
+<div class="hud-value" id="hudVisible">0</div>
+</div>
+</div>
+<div class="hud-row">
+<div class="hud-item">
+<div class="hud-label">mode</div>
+<div class="hud-value" id="hudMode">Paused</div>
+</div>
+<div class="hud-item">
+<div class="hud-label">speed</div>
+<div class="hud-value" id="hudSpeed">100×</div>
+</div>
+<div class="hud-item">
+<div class="hud-label">NEES</div>
+<div class="hud-value" id="hudNees">–</div>
+</div>
+<div class="hud-item">
+<div class="hud-label">NIS</div>
+<div class="hud-value" id="hudNis">–</div>
+</div>
+</div>
+</div>
+</div>
+<div class="hint"> Pan: drag · Zoom: scroll · Space: Run/Pause · R: Reset · S: Step </div>
+</section>
+<section class="card rel-card">
+<div class="card-head">
+<div class="card-title">Relative Position &amp; Covariance</div>
+</div>
+<div class="rel-wrap">
+<div class="ellipse-wrap">
+<div class="ellipse-head"> <div class="ellipse-scale" id="ellipseScale">–</div>
+</div>
+<canvas aria-label="Relative position and covariance ellipse plot" id="ellipseCanvas"></canvas>
+<div class="micro" id="ellipseHelp">
                       Centered at the EKF estimate (0,0). The dot shows the truth offset (truth − estimate) at the most recent measurement update.
                       Ellipses show 1σ, 2σ, and 3σ position uncertainty from the EKF covariance.
                     </div>
-                  </div>
-        </div>
-      </section>
-
+</div>
+</div>
+</section>
 <aside class="card controls-card">
-        <div class="card-head">
-          <div class="card-title">Simulation / Controls</div>
-        </div>
-
-        <!-- Pinned full-width simulation control bar (IDs unchanged) -->
-        <div class="simbarwrap" id="simBar" aria-label="Run and speed controls">
-          <div class="row simbar-row">
-            <button class="btn primary" id="btnRunPause" type="button">Run</button>
-            <button class="btn" id="btnStep" type="button">Step</button>
-            <button class="btn danger" id="btnReset" type="button">Reset</button>
-          </div>
-          <div class="speedbar" aria-label="simulation speed">
-            <button class="btn speedbtn" data-speed="1" type="button">1×</button>
-            <button class="btn speedbtn" data-speed="10" type="button">10×</button>
-            <button class="btn speedbtn active" data-speed="100" type="button">100×</button>
-            <button class="btn speedbtn" data-speed="1000" type="button">1000×</button>
-            <button class="btn speedbtn" data-speed="10000" type="button">10000×</button>
-          </div>
-        </div>
-
-        <div class="controls">
-          <div class="section orbit-ic-section">
-            <div class="section-title">Initial condition / desired orbit</div>
-            <div class="grid">
-              <label class="field">
-                <span>Perigee alt (km)</span>
-                <input id="inpPerigeeAlt" type="number" min="150" max="2000" step="10" value="300" />
-                <div class="bounds">min 150 · max 2000</div>
-              </label>
-
-              <label class="field">
-                <span>Eccentricity</span>
-                <input id="inpEcc" type="number" min="0" max="0.6" step="0.001" value="0.0" />
-                <div class="bounds">Controller requires e = 0</div>
-              </label>
-            </div>
-
-            <div class="micro">
+<div class="card-head">
+<div class="card-title">Simulation / Controls</div>
+</div>
+<!-- Pinned full-width simulation control bar (IDs unchanged) -->
+<div aria-label="Run and speed controls" class="simbarwrap" id="simBar">
+<div class="row simbar-row">
+<button class="btn primary" id="btnRunPause" type="button">Run</button>
+<button class="btn" id="btnStep" type="button">Step</button>
+<button class="btn danger" id="btnReset" type="button">Reset</button>
+</div>
+<div aria-label="simulation speed" class="speedbar">
+<button class="btn speedbtn" data-speed="1" type="button">1×</button>
+<button class="btn speedbtn" data-speed="10" type="button">10×</button>
+<button class="btn speedbtn active" data-speed="100" type="button">100×</button>
+<button class="btn speedbtn" data-speed="1000" type="button">1000×</button>
+<button class="btn speedbtn" data-speed="10000" type="button">10000×</button>
+</div>
+</div>
+<div class="controls">
+<div class="section control-section orbit-ic-section">
+<div class="section-title">Initial condition / desired orbit</div>
+<div class="grid">
+<label class="field">
+<span>Perigee alt (km)</span>
+<input id="inpPerigeeAlt" max="2000" min="150" step="10" type="number" value="300"/>
+<div class="bounds">min 150 · max 2000</div>
+</label>
+<label class="field">
+<span>Eccentricity</span>
+<input id="inpEcc" max="0.6" min="0" step="0.001" type="number" value="0.0"/>
+<div class="bounds">Controller requires e = 0</div>
+</label>
+</div>
+<div class="micro">
               Perigee radius r<sub>p</sub> = R<sub>E</sub> + altitude. Eccentricity sets an elliptical orbit (initialized at perigee).
             </div>
-          </div>
-
-          <div class="grid">
-            <label class="field">
-              <span>Δt (s)</span>
-              <input id="inpDt" type="number" min="1" max="120" step="1" value="10" />
-              <div class="bounds">min 1 · max 120</div>
-            </label>
-          </div>
-
-          <div class="section">
-            <div class="section-title">Measurement noise (per station)</div>
-            <div class="grid">
-              <label class="field">
-                <span>Measurement noise</span>
-                <select id="selMeasNoise">
-                  <option value="on" selected>On</option>
-                  <option value="off">Off</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="subhead">Truth (measurement generation)</div>
-            <div class="grid3">
+</div>
+<div class="grid">
 <label class="field">
-                <span>Range σ (km)</span>
-                <input id="inpSigRho" type="number" min="0" step="0.001" value="0.1" />
-                <div class="bounds">min 0</div>
-              </label>
-
-              <label class="field">
-                <span>Range-rate σ (km/s)</span>
-                <input id="inpSigRhoDot" type="number" min="0" step="0.001" value="1.0" />
-                <div class="bounds">min 0</div>
-              </label>
-
-              <label class="field">
-                <span>Bearing σ (rad)</span>
-                <input id="inpSigPhi" type="number" min="0" step="0.001" value="0.1" />
-                <div class="bounds">min 0</div>
-              </label>
-            </div>
-
-            <div class="subhead">EKF assumed (filter R)</div>
-            <div class="grid3">
-              <label class="field">
-                <span>Range σ (km)</span>
-                <input id="inpSigRhoEkf" type="number" min="0" step="0.001" value="0.1" />
-                <div class="bounds">min 0</div>
-              </label>
-
-              <label class="field">
-                <span>Range-rate σ (km/s)</span>
-                <input id="inpSigRhoDotEkf" type="number" min="0" step="0.001" value="1.0" />
-                <div class="bounds">min 0</div>
-              </label>
-
-              <label class="field">
-                <span>Bearing σ (rad)</span>
-                <input id="inpSigPhiEkf" type="number" min="0" step="0.001" value="0.1" />
-                <div class="bounds">min 0</div>
-              </label>
-            </div>
-
-
-            <div class="micro" id="measHelp">
+<span>Δt (s)</span>
+<input id="inpDt" max="120" min="1" step="1" type="number" value="10"/>
+<div class="bounds">min 1 · max 120</div>
+</label>
+</div>
+<div class="section control-section">
+<div class="section-title">Measurement noise (per station)</div>
+<div class="grid">
+<label class="field">
+<span>Measurement noise</span>
+<select id="selMeasNoise">
+<option selected="" value="on">On</option>
+<option value="off">Off</option>
+</select>
+</label>
+</div>
+<div class="subhead">Truth (measurement generation)</div>
+<div class="grid3">
+<label class="field">
+<span>Range σ (km)</span>
+<input id="inpSigRho" min="0" step="0.001" type="number" value="0.1"/>
+<div class="bounds">min 0</div>
+</label>
+<label class="field">
+<span>Range-rate σ (km/s)</span>
+<input id="inpSigRhoDot" min="0" step="0.001" type="number" value="1.0"/>
+<div class="bounds">min 0</div>
+</label>
+<label class="field">
+<span>Bearing σ (rad)</span>
+<input id="inpSigPhi" min="0" step="0.001" type="number" value="0.1"/>
+<div class="bounds">min 0</div>
+</label>
+</div>
+<div class="subhead">EKF assumed (filter R)</div>
+<div class="grid3">
+<label class="field">
+<span>Range σ (km)</span>
+<input id="inpSigRhoEkf" min="0" step="0.001" type="number" value="0.1"/>
+<div class="bounds">min 0</div>
+</label>
+<label class="field">
+<span>Range-rate σ (km/s)</span>
+<input id="inpSigRhoDotEkf" min="0" step="0.001" type="number" value="1.0"/>
+<div class="bounds">min 0</div>
+</label>
+<label class="field">
+<span>Bearing σ (rad)</span>
+<input id="inpSigPhiEkf" min="0" step="0.001" type="number" value="0.1"/>
+<div class="bounds">min 0</div>
+</label>
+</div>
+<div class="micro" id="measHelp">
               When enabled, each visible station generates (ρ, ρ̇, φ) and adds Gaussian noise using the <b>Truth</b> σ values above.
               The EKF uses the <b>assumed</b> σ values to build R for its measurement update.
               <span class="muted">σ denotes standard deviation.</span>
               For consistency (NEES/NIS), keep the assumed σ close to the truth σ.</div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">Process noise / disturbance acceleration</div>
-            <div class="grid">
-              <label class="field">
-                <span>Disturbance</span>
-                <select id="selDisturb">
-                  <option value="off" selected>Off</option>
-                  <option value="on">On</option>
-                </select>
-              </label>
-
-              
-              <label class="field">
-                <span>Truth disturbance accel σ<sub>a</sub> (mm/s²)</span>
-                <input id="inpSigA" type="range" min="0.10" max="1.00" step="0.01" value="0.10" />
-                <div class="bounds" id="sigABounds">0.10 mm/s² (0.10–1.00)</div>
-              </label>
-
-              <label class="field">
-                <span>EKF assumed accel σ<sub>a</sub> (mm/s²)</span>
-                <input id="inpSigAEkf" type="range" min="0.10" max="1.00" step="0.01" value="0.10" />
-                <div class="bounds" id="sigAEkfBounds">0.10 mm/s² (0.10–1.00)</div>
-              </label>
-
-              <label class="field">
-                <span>Perturb kick Δv (m/s)</span>
-                <input id="inpPerturbDv" type="range" min="0.5" max="20" step="0.5" value="5" />
-                <div class="bounds" id="perturbDvBounds">5.0 m/s (0.5–20)</div>
-              </label>
-            </div>
-
-            <div class="row tight">
-              <button class="btn" id="btnPerturbOrbit" type="button">Perturb Orbit</button>
-            </div>
-
-            <div class="micro" id="distHelp">
-              <b>Truth disturbance accel</b> applies a constant acceleration bias (same direction every step) to the truth dynamics.
+</div>
+<div class="section control-section">
+<div class="section-title">Process noise / disturbance acceleration</div>
+<div class="grid">
+<label class="field">
+<span>Disturbance</span>
+<select id="selDisturb">
+<option selected="" value="off">Off</option>
+<option value="on">On</option>
+</select>
+</label>
+<label class="field">
+<span>Truth disturbance accel σ<sub>a</sub> (mm/s²)</span>
+<input id="inpSigA" max="1.00" min="0.10" step="0.01" type="range" value="0.10"/>
+<div class="bounds" id="sigABounds">0.10 mm/s² (0.10–1.00)</div>
+</label>
+<label class="field">
+<span>EKF assumed accel σ<sub>a</sub> (mm/s²)</span>
+<input id="inpSigAEkf" max="1.00" min="0.10" step="0.01" type="range" value="0.10"/>
+<div class="bounds" id="sigAEkfBounds">0.10 mm/s² (0.10–1.00)</div>
+</label>
+<label class="field">
+<span>Perturb kick Δv (m/s)</span>
+<input id="inpPerturbDv" max="20" min="0.5" step="0.5" type="range" value="5"/>
+<div class="bounds" id="perturbDvBounds">5.0 m/s (0.5–20)</div>
+</label>
+</div>
+<div class="row tight">
+<button class="btn" id="btnPerturbOrbit" type="button">Perturb Orbit</button>
+</div>
+<div class="micro" id="distHelp">
+<b>Truth disturbance accel</b> applies a constant acceleration bias (same direction every step) to the truth dynamics.
               <b>EKF assumed accel</b> sets the filter’s process noise level (Q) in the EKF predict step.
               <b>Perturb Orbit</b> applies a one-time velocity “kick” (Δv) so you can watch the controller drive the orbit back.</div>
-          </div>
-
-          <div class="section" id="ctrlSection">
-            <div class="section-title">Controller (thruster acceleration)</div>
-            <div class="grid">
-              <label class="field">
-                <span>Controller type</span>
-                <select id="selCtrl">
-                  <option value="off" selected>Off</option>
-                  <option value="lqr">LQR</option>
-                </select>
-              </label>
-
-              
+</div>
+<div class="section control-section" id="ctrlSection">
+<div class="section-title">Controller (thruster acceleration)</div>
+<div class="grid">
 <label class="field">
-  <span>Control source</span>
-  <select id="selCtrlSource">
-    <option value="ekf" selected>Estimated (EKF)</option>
-    <option value="truth">Truth</option>
-  </select>
-  <div class="bounds">Default: Estimated (EKF)</div>
+<span>Controller type</span>
+<select id="selCtrl">
+<option selected="" value="off">Off</option>
+<option value="lqr">LQR</option>
+</select>
 </label>
-
 <label class="field">
-                <span>MAX THRUSTER ACCELERATION (G)</span>
-                <input id="inpUmaxG" type="number" min="0" step="0.001" value="0.01" />
-                <div class="bounds">min 0</div>
-              </label>
-            </div>
-
-            <div class="row tight">
-              <button class="btn primary" id="btnEnableLqr" type="button">Enable LQR</button>
-            </div>
-
-            <div class="subhead">LQR cost tuning (Bryson’s Rule)</div>
-            <div class="grid3">
-              <label class="field">
-                <span>State error emphasis α (low ↔ high)</span>
-                <input id="inpLqrAlpha" type="range" min="0.25" max="4.00" step="0.05" value="1.00" />
-                <div class="bounds" id="lqrAlphaBounds">1.00× (0.25–4.00)</div>
-              </label>
-
-              <label class="field">
-                <span>Control effort penalty β (low ↔ high)</span>
-                <input id="inpLqrBeta" type="range" min="0.25" max="4.00" step="0.05" value="1.00" />
-                <div class="bounds" id="lqrBetaBounds">1.00× (0.25–4.00)</div>
-              </label>
-            </div>
-
-            <div class="micro" id="lqrTuneHelp">
+<span>Control source</span>
+<select id="selCtrlSource">
+<option selected="" value="ekf">Estimated (EKF)</option>
+<option value="truth">Truth</option>
+</select>
+<div class="bounds">Default: Estimated (EKF)</div>
+</label>
+<label class="field">
+<span>MAX THRUSTER ACCELERATION (G)</span>
+<input id="inpUmaxG" min="0" step="0.001" type="number" value="0.01"/>
+<div class="bounds">min 0</div>
+</label>
+</div>
+<div class="row tight">
+<button class="btn primary" id="btnEnableLqr" type="button">Enable LQR</button>
+</div>
+<div class="subhead">LQR cost tuning (Bryson’s Rule)</div>
+<div class="grid3">
+<label class="field">
+<span>State error emphasis α (low ↔ high)</span>
+<input id="inpLqrAlpha" max="4.00" min="0.25" step="0.05" type="range" value="1.00"/>
+<div class="bounds" id="lqrAlphaBounds">1.00× (0.25–4.00)</div>
+</label>
+<label class="field">
+<span>Control effort penalty β (low ↔ high)</span>
+<input id="inpLqrBeta" max="4.00" min="0.25" step="0.05" type="range" value="1.00"/>
+<div class="bounds" id="lqrBetaBounds">1.00× (0.25–4.00)</div>
+</label>
+</div>
+<div class="micro" id="lqrTuneHelp">
               These sliders represent <b>Bryson’s Rule</b> style weighting: larger α means “care more about state error,” larger β means “penalize thruster effort.”
               This demo uses a fixed precomputed LQR gain; the sliders scale the commanded acceleration to approximate Q/R retuning (default = 1.00×).
             </div>
-
-            
-            <div class="micro muted" id="lqrScaleReadout">–</div>
+<div class="micro muted" id="lqrScaleReadout">–</div>
 <div class="micro warnnote" id="ctrlEccNote" style="display:none;">
               Controller is disabled because this LQR is linearized for a circular orbit. Set eccentricity to 0 to enable it.
             </div>
-
-            <div class="micro" id="ctrlHelp">
+<div class="micro" id="ctrlHelp">
 This demo applies acceleration directly at each integration step (not thruster-realistic).
 When <b>Control source</b> is set to <b>Estimated (EKF)</b>, measurement and process noise can appear as small “noise-driven burns” in the commanded acceleration.
 Switch to <b>Truth</b> to view the controller response without estimation noise.
 A separate project will demonstrate a more realistic pulsed-thruster application layer.</div>
-          </div>
-        </div>
-      </aside>
-
-      <section class="card plots-card">
-        <div class="card-head">
-          <div class="card-title">Diagnostics</div>
-          <div class="diag-actions">
-            <div class="tabs" role="tablist" aria-label="plot tabs">
-              <button class="tab active" data-tab="tabStates" type="button">States</button>
-              <button class="tab" data-tab="tabErrors" type="button">Errors</button>
-              <button class="tab" data-tab="tabMeas" type="button">Meas</button>
-              <button class="tab" data-tab="tabNees" type="button">NEES/NIS</button>
-              <button class="tab" data-tab="tabCtrl" type="button">Control</button>
-            </div>
-
-            <label class="windowctl" aria-label="plot window selector">
-              <span>Window</span>
-              <select id="selPlotWindow">
-                <option value="3600">1h</option>
-                <option value="10800" selected>3h</option>
-                <option value="21600">6h</option>
-                <option value="43200">12h</option>
-              </select>
-            </label>
-          </div>
-        </div>
-
-        <div class="tabpanes">
-          <div class="pane active" id="tabStates">
-            <div class="plotgrid">
-              <div class="plotcard">
-                <div class="plotlabel">X position</div>
-                <canvas class="plot" id="pltX"></canvas>
-              </div>
-              <div class="plotcard">
-                <div class="plotlabel">Y position</div>
-                <canvas class="plot" id="pltY"></canvas>
-              </div>
-              <div class="plotcard">
-                <div class="plotlabel">X velocity</div>
-                <canvas class="plot" id="pltXd"></canvas>
-              </div>
-              <div class="plotcard">
-                <div class="plotlabel">Y velocity</div>
-                <canvas class="plot" id="pltYd"></canvas>
-              </div>
-            </div>
-          </div>
-
-          <div class="pane" id="tabErrors">
-            <div class="plotgrid">
-              <div class="plotcard">
-                <div class="plotlabel">X error ±2σ</div>
-                <canvas class="plot" id="pltErrX"></canvas>
-              </div>
-              <div class="plotcard">
-                <div class="plotlabel">Y error ±2σ</div>
-                <canvas class="plot" id="pltErrY"></canvas>
-              </div>
-              <div class="plotcard">
-                <div class="plotlabel">Ẋ error ±2σ</div>
-                <canvas class="plot" id="pltErrXd"></canvas>
-              </div>
-              <div class="plotcard">
-                <div class="plotlabel">Ẏ error ±2σ</div>
-                <canvas class="plot" id="pltErrYd"></canvas>
-              </div>
-            </div>
-          </div>
-
-          <div class="pane" id="tabMeas">
-            <div class="plotgrid plotgrid-meas">
-              <div class="plotcard">
-                <div class="plotlabel">ρ (km): meas dots vs predicted line</div>
-                <canvas class="plot" id="pltRho"></canvas>
-              </div>
-              <div class="plotcard">
-                <div class="plotlabel">ρ̇ (km/s): meas dots vs predicted line</div>
-                <canvas class="plot" id="pltRhoDot"></canvas>
-              </div>
-              <div class="plotcard">
-                <div class="plotlabel">φ (rad): meas dots vs predicted line</div>
-                <canvas class="plot" id="pltPhi"></canvas>
-              </div>
-            </div>
-
-            <div class="stationboard-wrap">
-              <div class="stationboard-title">Stations</div>
-              <div class="stationboard" id="stationBoard" aria-label="Station board"></div>
-              <div class="micro stationboard-micro">
+</div>
+</div>
+</aside>
+<section class="card plots-card">
+<div class="card-head">
+<div class="card-title">Diagnostics</div>
+<div class="diag-actions">
+<div aria-label="plot tabs" class="tabs" role="tablist">
+<button class="tab active" data-tab="tabStates" type="button">States</button>
+<button class="tab" data-tab="tabErrors" type="button">Errors</button>
+<button class="tab" data-tab="tabMeas" type="button">Meas</button>
+<button class="tab" data-tab="tabNees" type="button">NEES/NIS</button>
+<button class="tab" data-tab="tabCtrl" type="button">Control</button>
+</div>
+<label aria-label="plot window selector" class="windowctl">
+<span>Window</span>
+<select id="selPlotWindow">
+<option value="3600">1h</option>
+<option selected="" value="10800">3h</option>
+<option value="21600">6h</option>
+<option value="43200">12h</option>
+</select>
+</label>
+</div>
+</div>
+<div class="tabpanes">
+<div class="pane active" id="tabStates">
+<div class="plotgrid">
+<div class="plotcard">
+<div class="plotlabel">X position</div>
+<canvas class="plot" id="pltX"></canvas>
+</div>
+<div class="plotcard">
+<div class="plotlabel">Y position</div>
+<canvas class="plot" id="pltY"></canvas>
+</div>
+<div class="plotcard">
+<div class="plotlabel">X velocity</div>
+<canvas class="plot" id="pltXd"></canvas>
+</div>
+<div class="plotcard">
+<div class="plotlabel">Y velocity</div>
+<canvas class="plot" id="pltYd"></canvas>
+</div>
+</div>
+</div>
+<div class="pane" id="tabErrors">
+<div class="plotgrid">
+<div class="plotcard">
+<div class="plotlabel">X error ±2σ</div>
+<canvas class="plot" id="pltErrX"></canvas>
+</div>
+<div class="plotcard">
+<div class="plotlabel">Y error ±2σ</div>
+<canvas class="plot" id="pltErrY"></canvas>
+</div>
+<div class="plotcard">
+<div class="plotlabel">Ẋ error ±2σ</div>
+<canvas class="plot" id="pltErrXd"></canvas>
+</div>
+<div class="plotcard">
+<div class="plotlabel">Ẏ error ±2σ</div>
+<canvas class="plot" id="pltErrYd"></canvas>
+</div>
+</div>
+</div>
+<div class="pane" id="tabMeas">
+<div class="plotgrid plotgrid-meas">
+<div class="plotcard">
+<div class="plotlabel">ρ (km): meas dots vs predicted line</div>
+<canvas class="plot" id="pltRho"></canvas>
+</div>
+<div class="plotcard">
+<div class="plotlabel">ρ̇ (km/s): meas dots vs predicted line</div>
+<canvas class="plot" id="pltRhoDot"></canvas>
+</div>
+<div class="plotcard">
+<div class="plotlabel">φ (rad): meas dots vs predicted line</div>
+<canvas class="plot" id="pltPhi"></canvas>
+</div>
+</div>
+<div class="stationboard-wrap">
+<div class="stationboard-title">Stations</div>
+<div aria-label="Station board" class="stationboard" id="stationBoard"></div>
+<div class="micro stationboard-micro">
                 Each box is one station. ACTIVE means that station produced a measurement at the last EKF update.
               </div>
-            </div>
-          </div>
-
-          <div class="pane" id="tabNees">
-            <div class="plotgrid plotgrid-nees">
-              <div class="plotcard">
-                <div class="plotlabel">NEES (df=4) + 95% bounds</div>
-                <canvas class="plot" id="pltNEES"></canvas>
-              </div>
-              <div class="plotcard">
-                <div class="plotlabel">NIS (df=3m) + 95% bounds</div>
-                <canvas class="plot" id="pltNIS"></canvas>
-              </div>
-            </div>
-
-            <div class="micro" id="neesHelp">
-              <b>NEES</b> checks state consistency: e = x<sub>true</sub> − x̂, and NEES = eᵀP⁻¹e.
+</div>
+</div>
+<div class="pane" id="tabNees">
+<div class="plotgrid plotgrid-nees">
+<div class="plotcard">
+<div class="plotlabel">NEES (df=4) + 95% bounds</div>
+<canvas class="plot" id="pltNEES"></canvas>
+</div>
+<div class="plotcard">
+<div class="plotlabel">NIS (df=3m) + 95% bounds</div>
+<canvas class="plot" id="pltNIS"></canvas>
+</div>
+</div>
+<div class="micro" id="neesHelp">
+<b>NEES</b> checks state consistency: e = x<sub>true</sub> − x̂, and NEES = eᵀP⁻¹e.
               <b>NIS</b> checks measurement consistency using the innovation and its covariance.
               If your filter is well tuned, these curves should usually stay inside the 95% bounds (occasional violations are expected).
             </div>
-          </div>
-
-          <div class="pane" id="tabCtrl">
-            <div class="notice" id="ctrlNotice" style="display:none;">
-              <div class="notice-title">Nothing for the controller to correct yet</div>
-              <div class="notice-body" id="ctrlNoticeBody">
+</div>
+<div class="pane" id="tabCtrl">
+<div class="notice" id="ctrlNotice" style="display:none;">
+<div class="notice-title">Nothing for the controller to correct yet</div>
+<div class="notice-body" id="ctrlNoticeBody">
                 Turn on LQR (requires eccentricity = 0) and/or enable a disturbance.
                 Or apply a one-time orbit perturbation to watch recovery.
               </div>
-              <div class="notice-actions">
-                <button class="btn" id="btnPerturbOrbit2" type="button">Perturb Orbit</button>
-              </div>
-            </div>
-
-            <div class="plotgrid">
-              <div class="plotcard">
-                <div class="plotlabel">u_r, u_t (mm/s²)</div>
-                <canvas class="plot" id="pltUrt"></canvas>
-              </div>
-              <div class="plotcard">
-                <div class="plotlabel">‖u‖ (mm/s²) + u_max</div>
-                <canvas class="plot" id="pltUm"></canvas>
-              </div>
-              <div class="plotcard">
-                <div class="plotlabel">Controller state: Δr (km)</div>
-                <canvas class="plot" id="pltCtrlErr"></canvas>
-              </div>
-              <div class="plotcard ctrl-status">
-                <div class="plotlabel">Thrusters</div>
-                <div class="statusbox ok" id="ctrlSatBox" aria-label="Thruster saturation status">
-                  <div class="statusbox-left">
-                    <div class="statusbox-title">Saturation</div>
-                    <div class="statusbox-value" id="ctrlSatText">OK</div>
-                  </div>
-                  <div class="statusbox-right">
-                    <div class="statusbox-sub">‖u‖ / u<sub>max</sub></div>
-                    <div class="statusbox-mono" id="ctrlSatFrac">0.00</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="micro">
+<div class="notice-actions">
+<button class="btn" id="btnPerturbOrbit2" type="button">Perturb Orbit</button>
+</div>
+</div>
+<div class="plotgrid">
+<div class="plotcard">
+<div class="plotlabel">u_r, u_t (mm/s²)</div>
+<canvas class="plot" id="pltUrt"></canvas>
+</div>
+<div class="plotcard">
+<div class="plotlabel">‖u‖ (mm/s²) + u_max</div>
+<canvas class="plot" id="pltUm"></canvas>
+</div>
+<div class="plotcard">
+<div class="plotlabel">Controller state: Δr (km)</div>
+<canvas class="plot" id="pltCtrlErr"></canvas>
+</div>
+<div class="plotcard ctrl-status">
+<div class="plotlabel">Thrusters</div>
+<div aria-label="Thruster saturation status" class="statusbox ok" id="ctrlSatBox">
+<div class="statusbox-left">
+<div class="statusbox-title">Saturation</div>
+<div class="statusbox-value" id="ctrlSatText">OK</div>
+</div>
+<div class="statusbox-right">
+<div class="statusbox-sub">‖u‖ / u<sub>max</sub></div>
+<div class="statusbox-mono" id="ctrlSatFrac">0.00</div>
+</div>
+</div>
+</div>
+</div>
+<div class="micro">
               The thrust arrow in the orbit view shows the applied control acceleration.
               It disappears automatically when control is off or zero.
             </div>
-          </div>
-        </div>
+</div>
+</div>
+<div class="hint small"> Tip: when paused, hover plots for coordinates; drag to pan, scroll to zoom. </div>
+</section>
+</main>
 
-        <div class="hint small"> Tip: when paused, hover plots for coordinates; drag to pan, scroll to zoom. </div>
-      </section>
-    </main>
-
-    <footer class="footer">
-      <div>2D orbit navigation demo: RK4 truth propagation, station measurements, EKF estimation, and LQR control.</div>
-    </footer>
-
-    <!-- Lucide icon dependency (allowed) -->
-    <script src="https://unpkg.com/lucide@latest"><\/script>
-        <script>
-      (function () {
-        // One-open-at-a-time accordion in the Simulation/Controls panel.
-        const controlsRoot = document.querySelector('.controls');
-        if (!controlsRoot) return;
-
-        const wanted = [
-          'Initial condition / desired orbit',
-          'Measurement noise (per station)',
-          'Process noise / disturbance acceleration',
-          'Controller'
-        ];
-
-        const sections = Array.from(controlsRoot.querySelectorAll('.section'));
-        const picked = [];
-
-        for (const sec of sections) {
-          const titleEl = sec.querySelector(':scope > .section-title');
-          if (!titleEl) continue;
-
-          const titleText = (titleEl.textContent || '').trim();
-          const isWanted = wanted.includes(titleText) || titleText.toLowerCase().startsWith('controller');
-          if (!isWanted) continue;
-
-          // Wrap body (everything except title) so we can collapse it.
-          const body = document.createElement('div');
-          body.className = 'section-body';
-
-          const kids = Array.from(sec.childNodes);
-          const titleIdx = kids.findIndex(n => n === titleEl);
-          for (let i = titleIdx + 1; i < kids.length; i++) body.appendChild(kids[i]);
-
-          // Replace title with button.
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'section-toggle';
-          btn.setAttribute('aria-expanded', 'false');
-
-          const label = document.createElement('span');
-          label.className = 'section-toggle-label';
-          label.textContent = titleText;
-
-          const chev = document.createElement('span');
-          chev.className = 'section-toggle-chevron';
-          chev.setAttribute('aria-hidden', 'true');
-          chev.textContent = '›';
-
-          btn.appendChild(label);
-          btn.appendChild(chev);
-
-          titleEl.replaceWith(btn);
-          sec.appendChild(body);
-          sec.classList.add('collapsed');
-          picked.push({ sec, btn, body });
-        }
-
-        // Move Δt into the first accordion section so it scrolls with the IC panel.
-        const dtGrid = controlsRoot.querySelector(':scope > .grid');
-        const icSec = controlsRoot.querySelector('.orbit-ic-section');
-        if (dtGrid && icSec) {
-          const icBody = icSec.querySelector('.section-body');
-          if (icBody) icBody.appendChild(dtGrid);
-        }
-
-        function sizeActiveBody(activeSec) {
-          const controls = controlsRoot;
-          const card = document.querySelector('.controls-card');
-          if (!controls || !card) return;
-
-          // Available vertical space is the controls area height.
-          const controlsH = controls.clientHeight;
-
-          // Fixed height = sum of all toggles + gaps (so the body scrolls instead of pushing layout).
-          let fixed = 0;
-          for (const { btn } of picked) fixed += btn.offsetHeight;
-
-          // Add a bit for inter-section spacing.
-          fixed += 10 * (picked.length - 1);
-
-          const maxBody = Math.max(160, controlsH - fixed - 8);
-
-          for (const { sec, body } of picked) {
-            body.style.maxHeight = (sec === activeSec) ? \`\${maxBody}px\` : '';
-          }
-        }
-
-        function openOnly(target) {
-          for (const item of picked) {
-            const isTarget = item.sec === target;
-            item.sec.classList.toggle('collapsed', !isTarget);
-            item.btn.setAttribute('aria-expanded', String(isTarget));
-          }
-          sizeActiveBody(target);
-          requestAnimationFrame(postHeight);
-        }
-
-        // Default open first.
-        if (picked.length) openOnly(picked[0].sec);
-
-        for (const item of picked) {
-          item.btn.addEventListener('click', () => openOnly(item.sec));
-        }
-
-        // Recompute body max-height on resize.
-        window.addEventListener('resize', () => {
-          const active = picked.find(p => p.btn.getAttribute('aria-expanded') === 'true');
-          if (active) sizeActiveBody(active.sec);
-        });
-
-    // Height reporting to parent (for iframe auto-resize)
-    let __lastH = 0;
-
-    function postHeight(force = false) {
-      const h = Math.max(
-        document.documentElement.scrollHeight,
-        document.body ? document.body.scrollHeight : 0
-      );
-
-      if (!force && h === __lastH) return;
-      __lastH = h;
-
-      parent.postMessage({ type: 'orbit-sim-resize', height: h }, '*');
-    }
-
-    // Run a few times after interactions because charts/layout can settle over a frame or two.
-    function bumpHeight() {
-      postHeight(true);
-      requestAnimationFrame(() => postHeight(true));
-      setTimeout(() => postHeight(true), 120);
-    }
-
-    window.addEventListener('load', bumpHeight);
-    window.addEventListener('resize', bumpHeight);
-
-    // Capture interactions that commonly change diagnostics height (tab switches, dropdowns, etc.)
-    document.addEventListener('click', bumpHeight, true);
-    document.addEventListener('input', bumpHeight, true);
-    document.addEventListener('change', bumpHeight, true);
-
-    // Poll as a backstop for overflow-only changes (scrollHeight changes without box resize)
-    setInterval(() => postHeight(false), 250);
-
-      })();
-    <\/script>
-
-    <script src="simulation.js"><\/script>
-  </body>
-</html>
-`;
-        frame.srcdoc = simDoc;
-
-        // Auto-resize iframe to match its content height.
-        window.addEventListener('message', (e) => {
-          if (!e || !e.data || e.data.type !== 'orbit-sim-resize') return;
-          if (frame.contentWindow && e.source !== frame.contentWindow) return;
-          const h = Number(e.data.height);
-          if (!Number.isFinite(h) || h < 200) return;
-          frame.style.height = Math.ceil(h) + 'px';
-        });
-      })();
-    </script>
-  </section>
-
-  <!-- IMPROVEMENTS -->
-  <section id="improvements" class="section">
-    <div class="container">
-      <h2 class="section-title">What I’d Do Differently / Improvements</h2>
-
-      <div class="two-col">
-        <div class="detail-card">
-          <h3 class="detail-card-title">Thruster-realistic control (pulsing + ΔV)</h3>
-          <p class="detail-card-content">
+</section>
+<!-- IMPROVEMENTS -->
+<section class="section" id="improvements">
+<div class="container">
+<h2 class="section-title">What I’d Do Differently / Improvements</h2>
+<div class="two-col">
+<div class="detail-card">
+<h3 class="detail-card-title">Thruster-realistic control (pulsing + ΔV)</h3>
+<p class="detail-card-content">
             The current demo applies continuous acceleration, which is convenient for control comparison but not representative of many real spacecraft thrusters. A flight-like actuation layer would convert commands to discrete firings (with minimum impulse bit) and track propellant/ΔV. It would also benefit from deadband logic to avoid “chasing” estimator noise.
           </p>
-          <ul class="list">
-            <li>Pulse-width or pulse-frequency modulation with a minimum impulse bit</li>
-            <li>Deadband + hysteresis to reduce chatter near the target</li>
-            <li>Report ΔV, duty cycle, and missed-command cases alongside state response</li>
-          </ul>
-        </div>
-
-        <div class="detail-card">
-          <h3 class="detail-card-title">Constraint-aware outer loop</h3>
-          <p class="detail-card-content">
+<ul class="list">
+<li>Pulse-width or pulse-frequency modulation with a minimum impulse bit</li>
+<li>Deadband + hysteresis to reduce chatter near the target</li>
+<li>Report ΔV, duty cycle, and missed-command cases alongside state response</li>
+</ul>
+</div>
+<div class="detail-card">
+<h3 class="detail-card-title">Constraint-aware outer loop</h3>
+<p class="detail-card-content">
             LQR is a clean baseline, but it does not enforce operational constraints beyond saturation. For realistic operations, you’d likely add an outer layer that explicitly trades performance against ΔV/propellant and handles constraints directly.
           </p>
-          <ul class="list">
-            <li>Per-axis constraints and optional rate/settling constraints</li>
-            <li>Optional MPC/QP layer for constraint handling and allocation</li>
-            <li>Extend Monte Carlo to harsher dropouts and larger initial errors</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- DOWNLOADS -->
-  <section id="downloads" class="section section-white">
-    <div class="container">
-      <h2 class="section-title">Reports &amp; Supporting Material</h2>
-
-      <div class="download-row">
-        <div class="detail-card">
-          <h3 class="detail-card-title">ASEN 5044 — Estimation report (PDF)</h3>
-          <p class="detail-card-content">
+<ul class="list">
+<li>Per-axis constraints and optional rate/settling constraints</li>
+<li>Optional MPC/QP layer for constraint handling and allocation</li>
+<li>Extend Monte Carlo to harsher dropouts and larger initial errors</li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+<!-- DOWNLOADS -->
+<section class="section section-white" id="downloads">
+<div class="container">
+<h2 class="section-title">Reports &amp; Supporting Material</h2>
+<div class="download-row">
+<div class="detail-card">
+<h3 class="detail-card-title">ASEN 5044 — Statistical Estimation of Dynamic Systems Report (PDF)</h3>
+<p class="detail-card-content">
             Orbit determination with nonlinear filtering, station geometry, stacked measurement updates, and NEES/NIS testing.
           </p>
-          <div class="card-actions">
-            <a class="btn-secondary btn-inline" href="ASEN 5044 - Team 1 Final Project Report.pdf" target="_blank" rel="noopener">Open PDF</a>
-          </div>
-        </div>
-
-        <div class="detail-card">
-          <h3 class="detail-card-title">ASEN 5014 — Control report (PDF)</h3>
-          <p class="detail-card-content">
+<div class="card-actions">
+<a class="btn-secondary btn-inline" href="ASEN 5044 - Team 1 Final Project Report.pdf" rel="noopener" target="_blank">Open PDF</a>
+</div>
+</div>
+<div class="detail-card">
+<h3 class="detail-card-title">ASEN 5014 — Linear Control Systems Report (PDF)</h3>
+<p class="detail-card-content">
             Linearized orbital perturbation model, LQR synthesis and tuning, and performance comparison against a manual controller.
           </p>
-          <div class="card-actions">
-            <a class="btn-secondary btn-inline" href="ASEN 5014 - Final Project Report.pdf" target="_blank" rel="noopener">Open PDF</a>
-          </div>
-        </div>
-
-        <div class="detail-card">
-          <h3 class="detail-card-title">Code</h3>
-          <p class="detail-card-content">
-            Source code for the demo and supporting scripts.
+<div class="card-actions">
+<a class="btn-secondary btn-inline" href="ASEN 5014 - Final Project Report.pdf" rel="noopener" target="_blank">Open PDF</a>
+</div>
+</div>
+<div class="detail-card">
+<h3 class="detail-card-title">Code</h3>
+<p class="detail-card-content">
+            Source code (In Matlab) for the demo and supporting scripts.
           </p>
-          <div class="card-actions">
-            <a class="btn-primary btn-inline" href="https://github.com/jack-huston" target="_blank" rel="noopener">GitHub</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA (standardized contact section) -->
-  <section id="contact" class="section contact-section">
-    <div class="contact-glow"></div>
-    <div class="container contact-container">
-      <h2 class="section-title contact-title">Let's Connect</h2>
-      <p class="contact-subtitle">
-        If you want to talk GN&amp;C, estimation, or simulation infrastructure, I’m happy to chat.
+<div class="card-actions">
+<a class="btn-primary btn-inline" href="https://github.com/Jack-Huston/Orbit-Determination/tree/main/Matlab%20Code" rel="noopener" target="_blank">GitHub</a>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- CTA (standardized contact section) -->
+<section class="section contact-section" id="contact">
+<div class="contact-glow"></div>
+<div class="container contact-container">
+<h2 class="section-title contact-title">Let's Connect</h2>
+<p class="contact-subtitle">
+        If you're interested, I want to chat! Please reach out via email or LinkedIn below.
       </p>
-
-      <div class="contact-links">
-        <a href="https://jack-huston.github.io/#projects" class="btn-cta-secondary">
-          <i data-lucide="arrow-left"></i>
-          <span>View Other Projects</span>
-        </a>
-
-        <a
-          class="contact-card cta-email-link"
-          href="mailto:jackthuston1@gmail.com?subject=Contact%20via%20Portfolio%20Website&body=Hi%20Jack,%0D%0A%0D%0A"
-          data-email="jackthuston1@gmail.com"
-          data-mailto="mailto:jackthuston1@gmail.com?subject=Contact%20via%20Portfolio%20Website&body=Hi%20Jack,%0D%0A%0D%0A"
-        >
-          <i data-lucide="mail" class="icon-contact"></i>
-          <span>Email Me</span>
-        </a>
-
-        <a href="https://www.linkedin.com/in/jack-huston/" target="_blank" rel="noopener noreferrer" class="contact-card">
-          <i data-lucide="linkedin" class="icon-contact"></i>
-          <span>LinkedIn</span>
-        </a>
-      </div>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer class="footer">
-    <div class="footer-content">
-      <span>© <span id="year"></span> Jack Huston.</span>
-      <i data-lucide="rocket" class="icon-footer"></i>
-      <span>Building GN&amp;C tools teams can trust.</span>
-    </div>
-  </footer>
-
-  <!-- Copy toast -->
-  <div class="toast" id="copyToast" aria-live="polite">Copied to Clipboard</div>
-
-  <script>
+<div class="contact-links">
+<a class="btn-cta-secondary" href="https://jack-huston.github.io/#projects">
+<i data-lucide="arrow-left"></i>
+<span>View Other Projects</span>
+</a>
+<a class="contact-card cta-email-link" data-email="jackthuston1@gmail.com" data-mailto="mailto:jackthuston1@gmail.com?subject=Contact%20via%20Portfolio%20Website&amp;body=Hi%20Jack,%0D%0A%0D%0A" href="mailto:jackthuston1@gmail.com?subject=Contact%20via%20Portfolio%20Website&amp;body=Hi%20Jack,%0D%0A%0D%0A">
+<i class="icon-contact" data-lucide="mail"></i>
+<span>Email Me</span>
+</a>
+<a class="contact-card" href="https://www.linkedin.com/in/jack-huston/" rel="noopener noreferrer" target="_blank">
+<i class="icon-contact" data-lucide="linkedin"></i>
+<span>LinkedIn</span>
+</a>
+</div>
+</div>
+</section>
+<!-- Footer -->
+<footer class="footer">
+<div class="footer-content">
+<span>© <span id="year"></span> Jack Huston.</span>
+<i class="icon-footer" data-lucide="rocket"></i>
+<span>Early career engineer looking to build the next generation of GN&C systems.</span>
+</div>
+</footer>
+<!-- Copy toast -->
+<div aria-live="polite" class="toast" id="copyToast">Copied to Clipboard</div>
+<script>
     document.addEventListener('DOMContentLoaded', () => {
       // Year
       const year = document.getElementById('year');
